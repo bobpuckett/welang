@@ -1,0 +1,1 @@
+We is a programming language which is designed to scale for humans and computers. There's a lot of good things coming and not a lot here.
