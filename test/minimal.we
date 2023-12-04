@@ -1,3 +1,4 @@
+@macro1 @macro2
 :twoArray [1,2]
 :threeArray(1;2;3)
 # thing

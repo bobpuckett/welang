@@ -1,4 +1,10 @@
 %{
+#include <llvm-c/Core.h>
+#include <llvm-c/ExecutionEngine.h>
+#include <llvm-c/Target.h>
+#include <llvm-c/Analysis.h>
+#include <llvm-c/BitWriter.h>
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -409,11 +415,114 @@ void printNodes(struct Node* root, int depth)
   printNodes(root->next, depth);
 }
 
+void toLlvm(struct Node* currentNode, LLVMModuleRef module)
+{
+  switch (currentNode->type) 
+  {
+    case INTEGER:
+      printf("INTEGER");
+      break;
+    case IDENTIFIER:
+      printf("IDENTIFIER");
+      break;
+    case IDENTIFIER_LIST:
+      printf("IDENTIFIER_LIST");
+      break;
+    case STRING:
+      printf("STRING");
+      break;
+    case LIST :
+      printf("LIST");
+      break;
+    case LIST_START:
+      printf("LIST_START");
+      break;
+    case LIST_END:
+      printf("LIST_END");
+      break;
+    case LIST_SEPARATOR:
+      printf("LIST_SEPARATOR");
+      break;
+    case FUNCTION:
+      printf("FUNCTION");
+      break;
+    case FUNCTION_START:
+      printf("FUNCTION_START");
+      break;
+    case FUNCTION_END:
+      printf("FUNCTION_END");
+      break;
+    case CLAUSE_SEPARATOR :
+      printf("CLAUSE_SEPARATOR");
+      break;
+    case MAP:
+      printf("MAP");
+      break;
+    case MAP_START:
+      printf("MAP_START");
+      break;
+    case MAP_END :
+      printf("MAP_END");
+      break;
+    case KEY_VALUE_PAIR:
+      printf("KEY_VALUE_PAIR");
+      break;
+    case TYPE_PARAMETER_START:
+      printf("TYPE_PARAMETER_START");
+      break;
+    case TYPE_PARAMETER_END:
+      printf("TYPE_PARAMETER_END");
+      break;
+    case TYPE_ALIAS:
+      printf("TYPE_ALIAS");
+      break;
+    case ARRAY_TYPE:
+      printf("ARRAY_TYPE");
+      break;
+    case TUPLE_TYPE:
+      printf("TUPLE_TYPE");
+      break;
+    case TYPE_IDENTITY :
+      printf("TYPE_IDENTITY");
+      break;
+    case DEFINE_SYMBOL:
+      printf("DEFINE_SYMBOL");
+      break;
+    case MACRO:
+      printf("MACRO");
+      break;
+    case MACRO_SYMBOL:
+      printf("MACRO_SYMBOL");
+      break;
+    case MACRO_LIST:
+      printf("MACRO_LIST");
+      break;
+    case DISCARD_SYMBOL:
+      printf("DISCARD_SYMBOL");
+      break;
+    case UNKNOWN :
+      printf("UNKNOWN");
+      break;
+    case TERM:
+      printf("TERM");
+      break;
+    case DISCARD:
+      printf("DISCARD");
+      break;
+    case EMPTY:
+      printf("EMPTY");
+      break;
+  }
+}
+
 int main()
 {
   yyparse();
 
   printNodes(root, 1);
+
+  LLVMModuleRef mod = LLVMModuleCreateWithName("default_module");
+  toLlvm(root, mod);
 
   return 0;
 }
