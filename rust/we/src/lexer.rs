@@ -13,6 +13,7 @@ pub enum Token {
 
     ClauseSeparator,
     ListSeparator,
+    IdentifierSeparator,
 
     Define,
     MacroSymbol,
@@ -53,7 +54,7 @@ impl TokenContext<'_> {
 
         return context;
     }
-    
+
     fn increment_position(&mut self) {
         self.position += 1;
         self.column += 1;
@@ -68,7 +69,7 @@ impl Parsable<Token> for TokenContext<'_> {
 
         let mut next_char = self.source.chars().nth(self.position);
 
-        while next_char.unwrap().is_whitespace() {
+        while next_char.is_some_and(|c| c.is_whitespace()) {
             self.position += 1;
 
             // TODO: crlf
@@ -157,6 +158,7 @@ impl Parsable<Token> for TokenContext<'_> {
 
                 Token::String(string)
             }
+            Some('.') => Token::IdentifierSeparator,
 
             _ => Token::Unknown,
         };
@@ -174,10 +176,10 @@ mod tests {
 
     #[test]
     fn handles_whitespace() {
-        let mut context: TokenContext = TokenContext::new(" hi : ( bob ) 123, ");
+        let mut context: TokenContext = TokenContext::new(" hi : ( bob.the.palindrome ) 123, ");
 
         assert_eq!(
-            context.get_next().unwrap(),
+            context.current.clone().unwrap(),
             Token::Identifier("hi".to_string())
         );
         assert_eq!(context.get_next().unwrap(), Token::Define);
@@ -186,8 +188,48 @@ mod tests {
             context.get_next().unwrap(),
             Token::Identifier("bob".to_string())
         );
+        assert_eq!(context.get_next().unwrap(), Token::IdentifierSeparator);
+        assert_eq!(
+            context.get_next().unwrap(),
+            Token::Identifier("the".to_string())
+        );
+        assert_eq!(context.get_next().unwrap(), Token::IdentifierSeparator);
+        assert_eq!(
+            context.get_next().unwrap(),
+            Token::Identifier("palindrome".to_string())
+        );
         assert_eq!(context.get_next().unwrap(), Token::FunctionEnd);
         assert_eq!(context.get_next().unwrap(), Token::Integer(123));
         assert_eq!(context.get_next().unwrap(), Token::ListSeparator);
+    }
+
+    #[test]
+    fn can_end_with_identifier_chain() {
+        let mut context: TokenContext = TokenContext::new("hello.from.the.out.side");
+
+        assert_eq!(
+            context.current.clone().unwrap(),
+            Token::Identifier("hello".to_string())
+        );
+        assert_eq!(context.get_next().unwrap(), Token::IdentifierSeparator);
+        assert_eq!(
+            context.get_next().unwrap(),
+            Token::Identifier("from".to_string())
+        );
+        assert_eq!(context.get_next().unwrap(), Token::IdentifierSeparator);
+        assert_eq!(
+            context.get_next().unwrap(),
+            Token::Identifier("the".to_string())
+        );
+        assert_eq!(context.get_next().unwrap(), Token::IdentifierSeparator);
+        assert_eq!(
+            context.get_next().unwrap(),
+            Token::Identifier("out".to_string())
+        );
+        assert_eq!(context.get_next().unwrap(), Token::IdentifierSeparator);
+        assert_eq!(
+            context.get_next().unwrap(),
+            Token::Identifier("side".to_string())
+        );
     }
 }

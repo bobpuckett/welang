@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::Map, process::id, vec};
+use std::collections::HashMap;
 
 use crate::lexer::{Parsable, Token, TokenContext};
 
@@ -14,7 +14,7 @@ pub enum Node {
     Discard,
 
     Integer(u32),
-    Identifier(String),
+    IdentifierChain(Vec<String>),
     String(String),
 }
 
@@ -32,11 +32,12 @@ pub fn parse_value(context: &mut TokenContext) -> Option<Box<Node>> {
         Some(Token::TypeIdentity) => None,
         Some(Token::ClauseSeparator) => todo!(),
         Some(Token::ListSeparator) => todo!(),
+        Some(Token::IdentifierSeparator) => todo!(),
         Some(Token::Define) => todo!(),
         Some(Token::MacroSymbol) => todo!(),
         Some(Token::DiscardSymbol) => None,
         Some(Token::Integer(value)) => Some(Box::new(Node::Integer(value))),
-        Some(Token::Identifier(ref value)) => Some(Box::new(Node::Identifier(value.clone()))),
+        Some(Token::Identifier(_)) => Some(Box::new(parse_identifier_chain(context))),
         Some(Token::String(ref value)) => Some(Box::new(Node::String(value.clone()))),
         Some(Token::Unknown) => todo!("We never have found the end of the chain"),
         None => todo!("No one knows where none will goes"),
@@ -128,7 +129,7 @@ fn parse_function(context: &mut TokenContext<'_>) -> Node {
             Some(Token::ClauseSeparator) => {
                 steps.append(&mut chain);
                 chain.clear();
-            },
+            }
             Some(_) => {
                 match parse_value(context) {
                     Some(value) => chain.insert(0, value),
@@ -138,11 +139,43 @@ fn parse_function(context: &mut TokenContext<'_>) -> Node {
             None => todo!("Function not closed"),
         };
     }
-    
+
     steps.append(&mut chain);
     chain.clear();
 
     Node::Function(steps)
+}
+
+fn parse_identifier_chain(context: &mut TokenContext<'_>) -> Node {
+    match context.current {
+        Some(Token::Identifier(_)) => {}
+        _ => todo!("Tried to parse a non-identifier as an identifier chain"),
+    };
+
+    let mut chain: Vec<String> = vec![];
+    let mut found_continue = true;
+    loop {
+        match context.current {
+            Some(Token::Identifier(ref value)) => {
+                if !found_continue {
+                    break;
+                }
+                found_continue = false;
+
+                chain.push(value.to_owned());
+
+                context.get_next();
+            }
+            Some(Token::IdentifierSeparator) => {
+                found_continue = true;
+                context.get_next();
+            }
+            Some(_) => break,
+            None => todo!(),
+        };
+    }
+
+    Node::IdentifierChain(chain)
 }
 
 #[cfg(test)]
@@ -191,13 +224,30 @@ mod tests {
                     match step {
                         Node::Integer(value) => {
                             assert_eq!(value, current);
-                        },
+                        }
                         _ => assert!(false, "Node was not an integer"),
                     }
 
                     current += 1;
-                };
-            },
+                }
+            }
+            _ => assert!(false, "Node was not a function"),
+        }
+    }
+
+    #[test]
+    fn parses_identifier_chain() {
+        let mut context = TokenContext::new("hello.from.the.out.side");
+        let result = *parse_value(&mut context).unwrap();
+
+        match result {
+            Node::IdentifierChain(identifiers) => {
+                assert_eq!("hello", identifiers.get(0).unwrap());
+                assert_eq!("from", identifiers.get(1).unwrap());
+                assert_eq!("the", identifiers.get(2).unwrap());
+                assert_eq!("out", identifiers.get(3).unwrap());
+                assert_eq!("side", identifiers.get(4).unwrap());
+            }
             _ => assert!(false, "Node was not a function"),
         }
     }
