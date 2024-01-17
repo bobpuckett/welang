@@ -1,2 +1,0 @@
-1. Strings parse as multiple things when there is a space
-2. Type parameters are too permissive. See commit above this one.

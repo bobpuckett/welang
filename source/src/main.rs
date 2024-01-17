@@ -5,6 +5,7 @@ use parser::parse_value;
 
 mod lexer;
 mod parser;
+mod flattener;
 
 fn main() -> io::Result<()> {
     let mut buffer = String::new();

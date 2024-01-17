@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::lexer::{Parsable, Token, TokenContext};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Node {
     List(Vec<Box<Node>>),
     Map(HashMap<String, Box<Node>>),
