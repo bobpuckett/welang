@@ -6,14 +6,13 @@ pub type IdentifierChain = Vec<String>;
 
 #[derive(Debug, Clone)]
 pub enum Type {
-    Identity(IdentifierChain),
-    Alias,
+    Identity(Box<Type>),
+    Alias(Box<Type>),
 
     Context,
     Array(Box<Type>),
 
     Atom,
-    Generic,
     Reference,
     None,
     Unknown,
@@ -41,7 +40,7 @@ pub enum Value {
     String(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Module {
     usings: Vec<IdentifierChain>,
     map: HashMap<String, Node>,
@@ -100,8 +99,8 @@ fn parse_value(context: &mut TokenContext) -> Option<Node> {
         Some(Token::TypeParameterStart) => Some(parse_type_parameter(context)),
         Some(Token::TypeParameterEnd) => todo!("Found mismatched type parameter end"),
 
-        Some(Token::TypeAlias) => None,
-        Some(Token::TypeIdentity) => None,
+        Some(Token::TypeAlias) => Some(parse_type_alias(context)),
+        Some(Token::TypeIdentity) => Some(parse_type_identity(context)),
 
         Some(Token::ClauseSeparator) => todo!(),
         Some(Token::ListSeparator) => todo!(),
@@ -304,6 +303,46 @@ fn parse_type_parameter(context: &mut TokenContext<'_>) -> Node {
     }
 }
 
+fn parse_type_alias(context: &mut TokenContext<'_>) -> Node {
+    // Start
+    match context.current {
+        Some(Token::TypeAlias) => {}
+        _ => todo!("Tried to parse a non-type-parameter as a type parameter"),
+    };
+    context.get_next();
+
+    let alias = parse_value(context);
+
+    match alias {
+        Some(a) => Node {
+            in_type: a.clone().in_type,
+            out_type: Type::Alias(Box::new(a.clone().out_type.clone())),
+            value: Box::new(Value::TypeAlias(a)),
+        },
+        None => todo!("No value parsed after alias"),
+    }
+}
+
+fn parse_type_identity(context: &mut TokenContext<'_>) -> Node {
+    // Start
+    match context.current {
+        Some(Token::TypeIdentity) => {}
+        _ => todo!("Tried to parse a non-type-parameter as a type parameter"),
+    };
+    context.get_next();
+
+    let id = parse_value(context);
+
+    match id {
+        Some(i) => Node {
+            in_type: i.clone().in_type,
+            out_type: Type::Identity(Box::new(i.clone().out_type)),
+            value: Box::new(Value::TypeIdentity(i)),
+        },
+        None => todo!("No value parsed after alias"),
+    }
+}
+
 fn parse_identifier_chain(context: &mut TokenContext<'_>) -> Node {
     match context.current {
         Some(Token::Identifier(_)) => {}
@@ -344,7 +383,7 @@ fn parse_identifier_chain(context: &mut TokenContext<'_>) -> Node {
 mod tests {
     use crate::{
         lexer::TokenContext,
-        parser::{parse_value, Node, Type, Value},
+        parser::{parse_value, Type, Value},
     };
 
     use super::parse_module;
@@ -451,6 +490,9 @@ mod tests {
         assert_eq!(result.usings.get(1), Some(&vec!["other".to_owned()]));
 
         assert_eq!(result.map.len(), 1);
-        assert!(result.map.get("fn").is_some(), "Expected function was not parsed.");
+        assert!(
+            result.map.get("fn").is_some(),
+            "Expected function was not parsed."
+        );
     }
 }
