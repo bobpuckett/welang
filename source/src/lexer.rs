@@ -18,13 +18,15 @@ pub enum Token {
     Define,
     MacroSymbol,
     DiscardSymbol,
+    
+    UseKeyword,
 
     // Comment,
     Integer(u32),
     Identifier(String),
     String(String),
 
-    Unknown,
+    Unknown(String),
 }
 
 pub trait Parsable<T> {
@@ -83,7 +85,7 @@ impl Parsable<Token> for TokenContext<'_> {
             next_char = self.source.chars().nth(self.position);
         }
 
-        if self.position > self.source.len() {
+        if self.position >= self.source.len() {
             return None;
         }
 
@@ -103,6 +105,17 @@ impl Parsable<Token> for TokenContext<'_> {
             Some(':') => Token::Define,
             Some('@') => Token::MacroSymbol,
             Some('_') => Token::DiscardSymbol,
+
+            // TODO: Wow this is ugly
+            Some('u') if self.source.chars().nth(self.position + 1) == Some('s')
+              && self.source.chars().nth(self.position + 2) == Some('e')
+              && self.source.chars().nth(self.position + 3).is_some_and(|c| c.is_whitespace()) => {
+                self.increment_position();
+                self.increment_position();
+                self.increment_position();
+
+                Token::UseKeyword
+            }
 
             // TODO: reduce duplication
             Some(id) if id.is_lowercase() => {
@@ -160,7 +173,7 @@ impl Parsable<Token> for TokenContext<'_> {
             }
             Some('.') => Token::IdentifierSeparator,
 
-            _ => Token::Unknown,
+            c => Token::Unknown(c.unwrap().to_string()),
         };
 
         self.increment_position();

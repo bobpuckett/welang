@@ -1,10 +1,11 @@
 use std::io;
 
 use lexer::TokenContext;
-use parser::parse_value;
+use crate::parser::parse_module;
 
 mod lexer;
 mod parser;
+mod typer;
 mod flattener;
 
 fn main() -> io::Result<()> {
@@ -12,7 +13,7 @@ fn main() -> io::Result<()> {
     io::stdin().read_line(&mut buffer)?;
 
     let mut context = TokenContext::new(&buffer);
-    let result = parse_value(&mut context);
+    let result = parse_module(&mut context);
 
     println!("{:#?}", result);
 
