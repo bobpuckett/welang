@@ -1,18 +1,27 @@
-// use std::collections::HashMap;
+use crate::parser::Module;
 
-// use crate::parser::Node;
+pub fn fully_type(root: Module) {}
 
-// pub struct Module {
+#[cfg(test)]
+mod tests {
+    #[test]
+    pub fn types_simple_declarations() {}
 
-// }
+    #[test]
+    pub fn types_function_with_reference() {}
 
-// pub fn assign_type(root: Node) {
+    #[test]
+    pub fn types_parameter() {}
 
+    #[test]
+    pub fn types_post_declarations() {}
 
-// }
+    #[test]
+    pub fn reports_type_parameter_mismatch() {}
 
-// #[cfg(test)]
-// mod tests {
-//     #[test]
-//     pub fn 
-// }
+    #[test]
+    pub fn reports_step_with_wrong_type() {}
+
+    #[test]
+    pub fn reports_array_with_wrong_type() {}
+}
