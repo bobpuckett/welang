@@ -21,16 +21,11 @@ pub enum Token {
     
     UseKeyword,
 
-    // Comment,
     Integer(u32),
     Identifier(String),
     String(String),
 
     Unknown(String),
-}
-
-pub trait Parsable<T> {
-    fn get_next(&mut self) -> Option<T>;
 }
 
 pub struct TokenContext<'a> {
@@ -61,10 +56,8 @@ impl TokenContext<'_> {
         self.position += 1;
         self.column += 1;
     }
-}
 
-impl Parsable<Token> for TokenContext<'_> {
-    fn get_next(&mut self) -> Option<Token> {
+    pub fn get_next(&mut self) -> Option<Token> {
         if self.position > self.source.len() {
             return None;
         }
@@ -167,7 +160,6 @@ impl Parsable<Token> for TokenContext<'_> {
                     last_char = next_char;
                     next_char = self.source.chars().nth(self.position);
                 }
-                self.position -= 1;
 
                 Token::String(string)
             }
@@ -185,7 +177,7 @@ impl Parsable<Token> for TokenContext<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::lexer::{Parsable, Token, TokenContext};
+    use crate::lexer::{Token, TokenContext};
 
     #[test]
     fn handles_whitespace() {
@@ -244,5 +236,18 @@ mod tests {
             context.get_next().unwrap(),
             Token::Identifier("side".to_string())
         );
+    }
+
+    #[test]
+    pub fn can_lex_string() {
+        let mut context: TokenContext = TokenContext::new("anyString: \"anyString\"
+        anyInt: 100
+        ");
+
+        assert_eq!(context.current, Some(Token::Identifier("anyString".to_owned())));
+        assert_eq!(context.get_next().unwrap(), Token::Define);
+        assert_eq!(context.get_next().unwrap(), Token::String("anyString".to_owned()));
+        assert_eq!(context.get_next().unwrap(), Token::Identifier("anyInt".to_owned()));
+        assert_eq!(context.get_next().unwrap(), Token::Define);
     }
 }

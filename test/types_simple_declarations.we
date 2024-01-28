@@ -1,0 +1,6 @@
+function: ()
+array: []
+map: {}
+int: 10
+string: "hi"
+discard: _

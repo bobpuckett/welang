@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use crate::lexer::{Parsable, Token, TokenContext};
+use crate::lexer::{Token, TokenContext};
 
 pub type IdentifierChain = Vec<String>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Identity(Box<Type>),
     Alias(Box<Type>),
@@ -18,14 +18,14 @@ pub enum Type {
     Unknown,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Node {
     pub in_type: Type,
     pub out_type: Type,
     pub value: Box<Value>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Array(Vec<Node>),
     Map(HashMap<String, Node>),
@@ -40,10 +40,10 @@ pub enum Value {
     String(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Module {
-    usings: Vec<IdentifierChain>,
-    map: HashMap<String, Node>,
+    pub usings: Vec<IdentifierChain>,
+    pub map: HashMap<String, Node>,
 }
 
 pub fn parse_module(context: &mut TokenContext) -> Module {
@@ -70,6 +70,15 @@ pub fn parse_module(context: &mut TokenContext) -> Module {
         let key = id;
 
         if context.get_next() != Some(Token::Define) {
+            // TODO: this can happen at the end of a file
+            // which means something is not get_next-ing.
+            // Really we need to rework the entire get_next
+            // philosophy, so instead of root-causing, I'm opting
+            // to just put this condition and move on.
+            if context.get_next() == None {
+                break;
+            }
+
             todo!("Missing define symbol in declaration of {:#?}", key);
         }
         context.get_next();
@@ -126,11 +135,17 @@ fn parse_value(context: &mut TokenContext) -> Option<Node> {
                 value: Box::new(Value::Integer(value.to_owned())),
             })
         }
-        Some(Token::String(ref value)) => Some(Node {
+        Some(Token::String(ref value)) => {
+            let string = value.clone();
+
+            context.get_next();
+
+            Some(Node {
             in_type: Type::None,
             out_type: Type::Array(Box::new(Type::Atom)),
-            value: Box::new(Value::String(value.clone())),
-        }),
+            value: Box::new(Value::String(string)),
+        }) 
+    },
         Some(Token::UseKeyword) => todo!("Found use keyword not at the top of the file. If you're trying to name a variable 'use', please choose something else so we can distinguish between using statements and variables."),
         Some(Token::Unknown(ref c)) => todo!("We never have found the end of the universe {}", &c),
         None => todo!("No one knows where none will goes"),
@@ -142,15 +157,21 @@ fn parse_list(context: &mut TokenContext) -> Node {
         Some(Token::ListStart) => {}
         _ => panic!("Tried to parse a non-list as a list"),
     }
+    context.get_next();
 
     let mut list: Vec<Node> = vec![];
 
     let mut last_was_separator = true;
-
     loop {
-        match context.get_next() {
-            Some(Token::ListEnd) => break,
-            Some(Token::ListSeparator) => last_was_separator = true,
+        match context.current {    
+            Some(Token::ListEnd) => {
+                context.get_next();
+                break;
+            },
+            Some(Token::ListSeparator) => {
+                context.get_next();
+                last_was_separator = true;
+            },
             Some(ref token) => {
                 if !last_was_separator {
                     todo!("Found a missing separator. {:#?}", token)
@@ -186,7 +207,10 @@ fn parse_map(context: &mut TokenContext<'_>) -> Node {
     loop {
         let next = context.get_next();
         let identifier: String = match next {
-            Some(Token::MapEnd) => break,
+            Some(Token::MapEnd) => {
+                context.get_next();
+                break;
+            },
             Some(Token::Identifier(string)) => string,
             Some(_) => todo!("Was not identifier: {:#?}", next),
             None => todo!("Identifier was none"),
@@ -381,6 +405,8 @@ fn parse_identifier_chain(context: &mut TokenContext<'_>) -> Node {
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use crate::{
         lexer::TokenContext,
         parser::{parse_value, Type, Value},
@@ -412,6 +438,13 @@ mod tests {
             }
             None => assert!(false, "List was None"),
         }
+    }
+
+    #[test]
+    fn finds_separator() {
+        let mut context = TokenContext::new("[local, in]");
+        // This has produced a missing separator error in the past
+        parse_value(&mut context);
     }
 
     #[test]
