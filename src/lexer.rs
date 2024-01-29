@@ -18,7 +18,7 @@ pub enum Token {
     Define,
     MacroSymbol,
     DiscardSymbol,
-    
+
     UseKeyword,
 
     Integer(u32),
@@ -100,9 +100,15 @@ impl TokenContext<'_> {
             Some('_') => Token::DiscardSymbol,
 
             // TODO: Wow this is ugly
-            Some('u') if self.source.chars().nth(self.position + 1) == Some('s')
-              && self.source.chars().nth(self.position + 2) == Some('e')
-              && self.source.chars().nth(self.position + 3).is_some_and(|c| c.is_whitespace()) => {
+            Some('u')
+                if self.source.chars().nth(self.position + 1) == Some('s')
+                    && self.source.chars().nth(self.position + 2) == Some('e')
+                    && self
+                        .source
+                        .chars()
+                        .nth(self.position + 3)
+                        .is_some_and(|c| c.is_whitespace()) =>
+            {
                 self.increment_position();
                 self.increment_position();
                 self.increment_position();
@@ -240,14 +246,26 @@ mod tests {
 
     #[test]
     pub fn can_lex_string() {
-        let mut context: TokenContext = TokenContext::new("anyString: \"anyString\"
+        let mut context: TokenContext = TokenContext::new(
+            "anyString: \"anyString\"
         anyInt: 100
-        ");
+        ",
+        );
 
-        assert_eq!(context.current, Some(Token::Identifier("anyString".to_owned())));
+        assert_eq!(
+            context.current,
+            Some(Token::Identifier("anyString".to_owned()))
+        );
         assert_eq!(context.get_next().unwrap(), Token::Define);
-        assert_eq!(context.get_next().unwrap(), Token::String("anyString".to_owned()));
-        assert_eq!(context.get_next().unwrap(), Token::Identifier("anyInt".to_owned()));
+        assert_eq!(
+            context.get_next().unwrap(),
+            Token::String("anyString".to_owned())
+        );
+        assert_eq!(
+            context.get_next().unwrap(),
+            Token::Identifier("anyInt".to_owned())
+        );
         assert_eq!(context.get_next().unwrap(), Token::Define);
+        assert_eq!(context.get_next().unwrap(), Token::Integer(100));
     }
 }
