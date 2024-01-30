@@ -1,81 +1,60 @@
 use crate::{
     modulizer::Tree,
-    parser::{Type, Value},
+    parser::{Node, Type, Value},
 };
+
 pub fn type_out(tree: &mut Tree) {
     if tree.is_leaf() {
         let module = tree
             .module
             .as_mut()
             .expect("was leaf, but no module present.");
-        
+
         for part in module.map.iter_mut() {
             let v = *part.1.value.clone();
             match v {
                 Value::Function(steps) => {
                     if steps.len() == 0 {
-                        // in
-                        if part.1.in_type != Type::Unknown && part.1.in_type != Type::None {
-                            todo!(
-                                "{} is an empty function has no input type, but found {:#?}",
-                                part.0,
-                                part.1.in_type
-                            );
-                        }
-                        // out
-                        if part.1.out_type != Type::Unknown && part.1.out_type != Type::None {
-                            todo!(
-                                "{} is an empty function has no output type, but found {:#?}",
-                                part.0,
-                                part.1.out_type
-                            );
-                        }
+                        assert_of(
+                            part.0,
+                            part.1,
+                            vec![Type::Unknown, Type::None],
+                            vec![Type::Unknown, Type::None],
+                        );
                         part.1.in_type = Type::None;
                         part.1.out_type = Type::None;
+                    } else {
+                        let first = steps.first();
+                        part.1.in_type = first.unwrap().in_type.clone();
+
+                        let last = steps.last();
+                        part.1.out_type = last.unwrap().out_type.clone();
                     }
                 }
                 Value::Array(value) => {
                     if value.len() == 0 {
-                        // in
-                        if part.1.in_type != Type::Unknown && part.1.in_type != Type::None {
-                            todo!(
-                                "{} is an empty array and has no input type, but found {:#?}",
-                                part.0,
-                                part.1.in_type
-                            );
-                        }
-                        // out
-                        if part.1.out_type != Type::Array(Box::new(Type::Unknown))
-                            && part.1.out_type != Type::Array(Box::new(Type::None))
-                        {
-                            todo!(
-                                "{} is an empty array and has no output type, but found {:#?}",
-                                part.0,
-                                part.1.out_type
-                            );
-                        }
+                        assert_of(
+                            part.0,
+                            part.1,
+                            vec![Type::Unknown, Type::None],
+                            vec![
+                                Type::Array(Box::new(Type::Unknown)),
+                                Type::Array(Box::new(Type::None)),
+                            ],
+                        );
+
                         part.1.in_type = Type::None;
                         part.1.out_type = Type::Array(Box::new(Type::None));
                     }
                 }
                 Value::Map(value) => {
                     if value.len() == 0 {
-                        // in
-                        if part.1.in_type != Type::Unknown && part.1.in_type != Type::None {
-                            todo!(
-                                "{} is an empty array and has no input type, but found {:#?}",
-                                part.0,
-                                part.1.in_type
-                            );
-                        }
-                        // out
-                        if part.1.out_type != Type::Context && part.1.out_type != Type::None {
-                            todo!(
-                                "{} is an empty array and has no output type, but found {:#?}",
-                                part.0,
-                                part.1.out_type
-                            );
-                        }
+                        assert_of(
+                            part.0,
+                            part.1,
+                            vec![Type::Unknown, Type::None],
+                            vec![Type::Context, Type::None],
+                        );
                         part.1.in_type = Type::None;
                         part.1.out_type = Type::Context;
                     }
@@ -83,55 +62,29 @@ pub fn type_out(tree: &mut Tree) {
                 Value::TypeAlias(_) => todo!(),
                 Value::TypeIdentity(_) => todo!(),
                 Value::Discard => {
-                    // in
-                    if part.1.in_type != Type::Unknown && part.1.in_type != Type::None {
-                        todo!(
-                            "{} is a discard and has no input type, but found {:#?}",
-                            part.0,
-                            part.1.in_type
-                        );
-                    }
-                    // out
-                    if part.1.out_type != Type::Unknown && part.1.out_type != Type::None {
-                        todo!(
-                            "{} is a discard and has no output type, but found {:#?}",
-                            part.0,
-                            part.1.out_type
-                        );
-                    }
+                    assert_of(
+                        part.0,
+                        part.1,
+                        vec![Type::Unknown, Type::None],
+                        vec![Type::Unknown, Type::None],
+                    );
                     part.1.in_type = Type::None;
                     part.1.out_type = Type::None;
                 }
                 Value::Integer(_) => {
-                    if part.1.in_type != Type::None {
-                        panic!(
-                            "Integer must have a None input type but found {:#?}",
-                            part.1.in_type
-                        );
-                    }
-                    if part.1.out_type != Type::Atom {
-                        panic!(
-                            "Integer must have an output of an array of atoms but found {:#?}",
-                            part.1.in_type
-                        );
-                    }
+                    assert_of(part.0, part.1, vec![Type::None], vec![Type::Atom]);
                     part.1.in_type = Type::None;
                     part.1.out_type = Type::Atom;
                 }
                 Value::IdentifierChain(_) => todo!(),
                 Value::String(_) => {
-                    if part.1.in_type != Type::None {
-                        panic!(
-                            "String must have a None input type but found {:#?}",
-                            part.1.in_type
-                        );
-                    }
-                    if part.1.out_type != Type::Array(Box::new(Type::Atom)) {
-                        panic!(
-                            "String must have an output of an array of atoms but found {:#?}",
-                            part.1.in_type
-                        );
-                    }
+                    assert_of(
+                        part.0,
+                        part.1,
+                        vec![Type::None],
+                        vec![Type::Array(Box::new(Type::Atom))],
+                    );
+
                     part.1.in_type = Type::None;
                     part.1.out_type = Type::Array(Box::new(Type::Atom));
                 }
@@ -140,6 +93,20 @@ pub fn type_out(tree: &mut Tree) {
     }
 }
 
+fn assert_of(name: &str, node: &Node, in_type: Vec<Type>, out_type: Vec<Type>) {
+    if !in_type.contains(&node.in_type) {
+        panic!(
+            "{} must have a {:#?} input type, but found: {:#?}",
+            name, in_type, node.in_type
+        );
+    }
+    if !out_type.contains(&node.out_type) {
+        panic!(
+            "{} must have a {:#?} output type, but found: {:#?}",
+            name, out_type, node.out_type
+        );
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::type_out;
@@ -197,8 +164,20 @@ mod tests {
         assert_eq!(discard.out_type, Type::None);
         assert_eq!(*discard.value, Value::Discard);
     }
+
+    #[test]
+    pub fn types_function_with_atom() {
+        let mut tree = to_module_tree("test/types_function_with_atom.we");
+        type_out(&mut tree);
+
+        let module = tree.module.unwrap();
+        let atomized = module.map.get("atomized").unwrap();
+        assert_eq!(atomized.in_type, Type::None);
+        assert_eq!(atomized.out_type, Type::Atom);
+    }
     #[test]
     pub fn types_function_with_reference() {}
+
     #[test]
     pub fn types_parameter() {}
     #[test]
