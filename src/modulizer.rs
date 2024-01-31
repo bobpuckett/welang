@@ -5,34 +5,20 @@ use std::{
 
 use crate::{
     lexer::TokenContext,
-    parser::{parse_module, Module},
+    parser::{parse_module, Node, Type, Value},
 };
 
-#[derive(Debug, Clone)]
-// pub enum Tree {
-//     Internal(HashMap<String, Box<Tree>>),
-//     Leaf(String, Module)
-// }
-pub struct Tree {
-    pub module: Option<Module>,
-    pub sub: Option<HashMap<String, Box<Tree>>>,
-}
-impl Tree {
-    pub fn is_leaf(&self) -> bool {
-        self.sub.is_none()
-    }
-}
-
-pub fn to_module_tree(path: &str) -> Tree {
+pub fn to_module_tree(path: &str) -> Node {
     let md = metadata(&path);
     match md {
         Ok(val) if val.is_file() => {
             let content = fs::read_to_string(&path);
 
             match content {
-                Ok(source) => Tree {
-                    module: Some(parse_module(&mut TokenContext::new(&source))),
-                    sub: None,
+                Ok(source) => Node {
+                    in_type: Type::None,
+                    out_type: Type::None, // TODO: Is None really the right type here?
+                    value: Box::new(parse_module(&mut TokenContext::new(&source))),
                 },
                 Err(_) => todo!("Could not read {}", &path),
             }
@@ -46,13 +32,14 @@ pub fn to_module_tree(path: &str) -> Tree {
                     let module_name = get_mod_name(&next_path);
                     let submodule = to_module_tree(next_path);
 
-                    (module_name, Box::new(submodule))
+                    (module_name, submodule)
                 })
                 .collect::<HashMap<_, _>>();
 
-            Tree {
-                module: None,
-                sub: Some(map),
+            Node {
+                in_type: Type::None,
+                out_type: Type::None,
+                value: Box::new(Value::Map(map)),
             }
         }
         Ok(_) => todo!(), // could be a symlink

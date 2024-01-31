@@ -27,6 +27,8 @@ pub struct Node {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    Module{usings: Vec<IdentifierChain>, map:   HashMap<String, Node>},
+    
     Array(Vec<Node>),
     Map(HashMap<String, Node>),
     Function(Vec<Node>),
@@ -40,13 +42,7 @@ pub enum Value {
     String(String),
 }
 
-#[derive(Debug, Clone)]
-pub struct Module {
-    pub usings: Vec<IdentifierChain>,
-    pub map: HashMap<String, Node>,
-}
-
-pub fn parse_module(context: &mut TokenContext) -> Module {
+pub fn parse_module(context: &mut TokenContext) -> Value {
     let mut usings: Vec<IdentifierChain> = vec![];
     let mut map: HashMap<String, Node> = HashMap::new();
 
@@ -91,7 +87,7 @@ pub fn parse_module(context: &mut TokenContext) -> Module {
         );
     }
 
-    Module { usings, map }
+    Value::Module { usings, map }
 }
 
 fn parse_value(context: &mut TokenContext) -> Option<Node> {
@@ -514,18 +510,19 @@ mod tests {
         fn: (1 2 3)
         "#,
         );
-        let result = parse_module(&mut context);
+        if let Value::Module{usings, map} = parse_module(&mut context){
 
         assert_eq!(
-            result.usings.get(0),
+            usings.get(0),
             Some(&vec!["first".to_owned(), "thing".to_owned()])
         );
-        assert_eq!(result.usings.get(1), Some(&vec!["other".to_owned()]));
+        assert_eq!(usings.get(1), Some(&vec!["other".to_owned()]));
 
-        assert_eq!(result.map.len(), 1);
+        assert_eq!(map.len(), 1);
         assert!(
-            result.map.get("fn").is_some(),
+            map.get("fn").is_some(),
             "Expected function was not parsed."
         );
+    }
     }
 }
