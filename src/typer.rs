@@ -112,13 +112,25 @@ fn assert_of(name: &str, node: &Node, in_type: Vec<Type>, out_type: Vec<Type>) {
 mod tests {
     use super::type_out;
     use crate::{
+        lexer::TokenContext,
         modulizer::to_module_tree,
-        parser::{Type, Value},
+        parser::{parse_module, Node, Type, Value},
     };
     use std::collections::HashMap;
     #[test]
     pub fn types_simple_declarations() {
-        let mut node = to_module_tree("test/types_simple_declarations.we");
+        let mut node = Node {
+            in_type: Type::None,
+            out_type: Type::None,
+            value: Box::new(parse_module(&mut TokenContext::new(
+                r#"function: ()
+                array: []
+                map: {}
+                int: 10
+                string: "hi"
+                discard: _"#,
+            ))),
+        };
         type_out(&mut node);
 
         println!("typed: {:#?}", node);
@@ -166,8 +178,13 @@ mod tests {
 
     #[test]
     pub fn types_function_with_atom() {
-        let mut node = to_module_tree("test/types_function_with_atom.we");
+        let mut node = Node {
+            in_type: Type::None,
+            out_type: Type::None,
+            value: Box::new(parse_module(&mut TokenContext::new(r#"atomized: (100)"#))),
+        };
         type_out(&mut node);
+
         if let Value::Module { usings: _, map } = *node.value.clone() {
             let atomized = map.get("atomized").unwrap();
             assert_eq!(atomized.in_type, Type::None);
