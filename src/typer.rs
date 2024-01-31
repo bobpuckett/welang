@@ -1,17 +1,25 @@
 use crate::parser::{Node, Type, Value};
 
-pub fn type_out(node: &mut Node) {
-    match node.value.as_mut() {
+pub fn type_it(root: &mut Node) {
+    if let Value::Module { usings: _, map } = root.value.as_mut() {
+        for part in map.iter_mut() {
+            type_out(root, part.1);
+        }
+    }
+}
+
+pub fn type_out(root: &mut Node, target: &mut Node) {
+    match target.value.as_mut() {
         Value::Module { usings: _, map } => {
             for part in map.iter_mut() {
-                type_out(part.1);
+                type_out(root, part.1);
             }
         }
         Value::Array(value) => {
             if value.len() == 0 {
                 assert_of(
                     "array",
-                    &node,
+                    &target,
                     vec![Type::Unknown, Type::None],
                     vec![
                         Type::Array(Box::new(Type::Unknown)),
@@ -19,8 +27,8 @@ pub fn type_out(node: &mut Node) {
                     ],
                 );
 
-                node.in_type = Type::None;
-                node.out_type = Type::Array(Box::new(Type::None));
+                target.in_type = Type::None;
+                target.out_type = Type::Array(Box::new(Type::None));
             } else {
                 panic!("tried to handle a non-zero array");
             }
@@ -29,12 +37,12 @@ pub fn type_out(node: &mut Node) {
             if value.len() == 0 {
                 assert_of(
                     "map",
-                    node,
+                    target,
                     vec![Type::Unknown, Type::None],
                     vec![Type::Context, Type::None],
                 );
-                node.in_type = Type::None;
-                node.out_type = Type::Context;
+                target.in_type = Type::None;
+                target.out_type = Type::Context;
             } else {
                 todo!("map waaas not empty")
             }
@@ -43,22 +51,22 @@ pub fn type_out(node: &mut Node) {
             if steps.len() == 0 {
                 assert_of(
                     "function",
-                    node,
+                    target,
                     vec![Type::Unknown, Type::None],
                     vec![Type::Unknown, Type::None],
                 );
-                node.in_type = Type::None;
-                node.out_type = Type::None;
+                target.in_type = Type::None;
+                target.out_type = Type::None;
             } else {
                 for step in steps.iter_mut() {
-                    type_out(step);
+                    type_out(root, step);
                 }
 
                 let first = steps.first();
-                node.in_type = first.unwrap().in_type.clone();
+                target.in_type = first.unwrap().in_type.clone();
 
                 let last = steps.last();
-                node.out_type = last.unwrap().out_type.clone();
+                target.out_type = last.unwrap().out_type.clone();
             }
         }
         Value::TypeAlias(_) => todo!(),
@@ -66,29 +74,29 @@ pub fn type_out(node: &mut Node) {
         Value::Discard => {
             assert_of(
                 "discard",
-                node,
+                target,
                 vec![Type::Unknown, Type::None],
                 vec![Type::Unknown, Type::None],
             );
-            node.in_type = Type::None;
-            node.out_type = Type::None;
+            target.in_type = Type::None;
+            target.out_type = Type::None;
         }
         Value::Integer(_) => {
-            assert_of("integer", node, vec![Type::None], vec![Type::Atom]);
-            node.in_type = Type::None;
-            node.out_type = Type::Atom;
+            assert_of("integer", target, vec![Type::None], vec![Type::Atom]);
+            target.in_type = Type::None;
+            target.out_type = Type::Atom;
         }
         Value::IdentifierChain(_) => todo!(),
         Value::String(_) => {
             assert_of(
                 "string",
-                node,
+                target,
                 vec![Type::None],
                 vec![Type::Array(Box::new(Type::Atom))],
             );
 
-            node.in_type = Type::None;
-            node.out_type = Type::Array(Box::new(Type::Atom));
+            target.in_type = Type::None;
+            target.out_type = Type::Array(Box::new(Type::Atom));
         }
     }
 }
@@ -110,10 +118,9 @@ fn assert_of(name: &str, node: &Node, in_type: Vec<Type>, out_type: Vec<Type>) {
 
 #[cfg(test)]
 mod tests {
-    use super::type_out;
+    use super::type_it;
     use crate::{
         lexer::TokenContext,
-        modulizer::to_module_tree,
         parser::{parse_module, Node, Type, Value},
     };
     use std::collections::HashMap;
@@ -131,7 +138,7 @@ mod tests {
                 discard: _"#,
             ))),
         };
-        type_out(&mut node);
+        type_it(&mut node);
 
         println!("typed: {:#?}", node);
 
@@ -183,7 +190,7 @@ mod tests {
             out_type: Type::None,
             value: Box::new(parse_module(&mut TokenContext::new(r#"atomized: (100)"#))),
         };
-        type_out(&mut node);
+        type_it(&mut node);
 
         if let Value::Module { usings: _, map } = *node.value.clone() {
             let atomized = map.get("atomized").unwrap();
