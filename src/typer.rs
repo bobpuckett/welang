@@ -1,11 +1,15 @@
 use crate::parser::{Node, Type, Value};
 
 pub fn type_it(root: &mut Node) {
-    if let Value::Module { usings: _, map } = root.value.as_mut() {
-        for part in map.iter_mut() {
-            type_out(root, part.1);
+    match root.value {
+        Value::Module { usings, map } => {
+            for part in map.iter_mut() {
+                type_out(root, part.1);
+            }
         }
+        _ => panic!(),
     }
+    //if let Value::Module { usings: _, map } = root.value.as_mut() {}
 }
 
 pub fn type_out(root: &mut Node, target: &mut Node) {
