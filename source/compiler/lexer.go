@@ -17,8 +17,8 @@ const (
 	FUNCTION_END
 	TYPE_PARAMETER_START
 	TYPE_PARAMETER_END
-	TYPE_ALIAS
-	TYPE_IDENTITY
+	TYPE_ALIAS_SYMBOL
+	TYPE_IDENTITY_SYMBOL
 
 	CLAUSE_SEPARATOR
 	LIST_SEPARATOR
@@ -30,9 +30,9 @@ const (
 
 	USE_KEYWORD
 
-	INTEGER
+	INTEGER_LITERAL
 	IDENTIFIER
-	STRING
+	STRING_LITERAL
 
 	UNKNOWN
 )
@@ -76,8 +76,8 @@ func (scanner *Scanner) MoveNext() bool {
 		scanner.isSymbol(')', FUNCTION_END) ||
 		scanner.isSymbol('<', TYPE_PARAMETER_START) ||
 		scanner.isSymbol('>', TYPE_PARAMETER_END) ||
-		scanner.isSymbol('\'', TYPE_ALIAS) ||
-		scanner.isSymbol('*', TYPE_IDENTITY) ||
+		scanner.isSymbol('\'', TYPE_ALIAS_SYMBOL) ||
+		scanner.isSymbol('*', TYPE_IDENTITY_SYMBOL) ||
 		scanner.isSymbol(';', CLAUSE_SEPARATOR) ||
 		scanner.isSymbol(',', LIST_SEPARATOR) ||
 		scanner.isSymbol(':', DEFINE) ||
@@ -86,8 +86,8 @@ func (scanner *Scanner) MoveNext() bool {
 		scanner.isSymbol('.', IDENTIFIER_SEPARATOR) ||
 		scanner.isKeyword("use", USE_KEYWORD) ||
 		scanner.isIdentifier(IDENTIFIER) ||
-		scanner.isNumber(INTEGER) ||
-		scanner.isString(STRING)
+		scanner.isNumber(INTEGER_LITERAL) ||
+		scanner.isString(STRING_LITERAL)
 	// TODO: unknown will make an infinite loop
 }
 

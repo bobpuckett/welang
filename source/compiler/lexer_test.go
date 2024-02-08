@@ -16,7 +16,7 @@ func TestHandlesWhitespace(t *testing.T) {
 	assertNext(t, &scanner, IDENTIFIER_SEPARATOR, ".")
 	assertNext(t, &scanner, IDENTIFIER, "palindrome")
 	assertNext(t, &scanner, FUNCTION_END, ")")
-	assertNext(t, &scanner, INTEGER, "123")
+	assertNext(t, &scanner, INTEGER_LITERAL, "123")
 	assertNext(t, &scanner, LIST_SEPARATOR, ",")
 }
 
@@ -40,10 +40,10 @@ func TestCanLexString(t *testing.T) {
 	println(scanner.Source)
 	assertNext(t, &scanner, IDENTIFIER, "anyString")
 	assertNext(t, &scanner, DEFINE, ":")
-	assertNext(t, &scanner, STRING, "any\\\"String")
+	assertNext(t, &scanner, STRING_LITERAL, "any\\\"String")
 	assertNext(t, &scanner, IDENTIFIER, "anyInt")
 	assertNext(t, &scanner, DEFINE, ":")
-	assertNext(t, &scanner, INTEGER, "100")
+	assertNext(t, &scanner, INTEGER_LITERAL, "100")
 }
 
 func assertNext(t *testing.T, scanner *Scanner, token Token, value string) {
