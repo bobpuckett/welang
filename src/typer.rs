@@ -1,29 +1,13 @@
 use crate::parser::{Node, Type, Value};
 
-pub fn type_it(root: &mut Node) {
-    match root.value {
-        Value::Module { usings, map } => {
-            for part in map.iter_mut() {
-                type_out(root, part.1);
-            }
-        }
-        _ => panic!(),
-    }
-    //if let Value::Module { usings: _, map } = root.value.as_mut() {}
-}
-
-pub fn type_out(root: &mut Node, target: &mut Node) {
-    match target.value.as_mut() {
-        Value::Module { usings: _, map } => {
-            for part in map.iter_mut() {
-                type_out(root, part.1);
-            }
-        }
+pub fn walk_first_pass(node: &mut Node) {
+    match node.value.as_mut() {
+        Value::Module { usings: _, map } => map.iter_mut().for_each(|part| walk_first_pass(part.1)),
         Value::Array(value) => {
             if value.len() == 0 {
                 assert_of(
                     "array",
-                    &target,
+                    &node,
                     vec![Type::Unknown, Type::None],
                     vec![
                         Type::Array(Box::new(Type::Unknown)),
@@ -31,8 +15,8 @@ pub fn type_out(root: &mut Node, target: &mut Node) {
                     ],
                 );
 
-                target.in_type = Type::None;
-                target.out_type = Type::Array(Box::new(Type::None));
+                node.in_type = Type::None;
+                node.out_type = Type::Array(Box::new(Type::None));
             } else {
                 panic!("tried to handle a non-zero array");
             }
@@ -41,12 +25,12 @@ pub fn type_out(root: &mut Node, target: &mut Node) {
             if value.len() == 0 {
                 assert_of(
                     "map",
-                    target,
+                    node,
                     vec![Type::Unknown, Type::None],
                     vec![Type::Context, Type::None],
                 );
-                target.in_type = Type::None;
-                target.out_type = Type::Context;
+                node.in_type = Type::None;
+                node.out_type = Type::Context;
             } else {
                 todo!("map waaas not empty")
             }
@@ -55,22 +39,22 @@ pub fn type_out(root: &mut Node, target: &mut Node) {
             if steps.len() == 0 {
                 assert_of(
                     "function",
-                    target,
+                    node,
                     vec![Type::Unknown, Type::None],
                     vec![Type::Unknown, Type::None],
                 );
-                target.in_type = Type::None;
-                target.out_type = Type::None;
+                node.in_type = Type::None;
+                node.out_type = Type::Function(Box::new(Type::None));
             } else {
                 for step in steps.iter_mut() {
-                    type_out(root, step);
+                    walk_first_pass(step);
                 }
 
                 let first = steps.first();
-                target.in_type = first.unwrap().in_type.clone();
+                node.in_type = first.unwrap().in_type.clone();
 
                 let last = steps.last();
-                target.out_type = last.unwrap().out_type.clone();
+                node.out_type = Type::Function(Box::new(last.unwrap().out_type.clone()));
             }
         }
         Value::TypeAlias(_) => todo!(),
@@ -78,30 +62,56 @@ pub fn type_out(root: &mut Node, target: &mut Node) {
         Value::Discard => {
             assert_of(
                 "discard",
-                target,
+                node,
                 vec![Type::Unknown, Type::None],
                 vec![Type::Unknown, Type::None],
             );
-            target.in_type = Type::None;
-            target.out_type = Type::None;
+            node.in_type = Type::None;
+            node.out_type = Type::None;
         }
         Value::Integer(_) => {
-            assert_of("integer", target, vec![Type::None], vec![Type::Atom]);
-            target.in_type = Type::None;
-            target.out_type = Type::Atom;
+            assert_of("integer", node, vec![Type::None], vec![Type::Atom]);
+            node.in_type = Type::None;
+            node.out_type = Type::Atom;
         }
-        Value::IdentifierChain(_) => todo!(),
+        Value::IdentifierChain(_) => {
+            assert_of(
+                "reference",
+                node,
+                vec![Type::Unknown],
+                vec![Type::Unknown, Type::Reference],
+            );
+            node.in_type = Type::Unknown;
+            node.out_type = Type::Reference;
+        }
         Value::String(_) => {
             assert_of(
                 "string",
-                target,
+                node,
                 vec![Type::None],
                 vec![Type::Array(Box::new(Type::Atom))],
             );
 
-            target.in_type = Type::None;
-            target.out_type = Type::Array(Box::new(Type::Atom));
+            node.in_type = Type::None;
+            node.out_type = Type::Array(Box::new(Type::Atom));
         }
+    }
+}
+
+pub fn walk_second_pass(node: &mut Node) {
+    match node.value.as_mut() {
+        Value::Module { usings: _, map } => {
+            map.iter_mut().for_each(|part| walk_second_pass(part.1))
+        }
+        Value::Array(arr) => arr.iter_mut().for_each(|item| walk_second_pass(item)),
+        Value::Map(map) => map.iter_mut().for_each(|part| walk_second_pass(part.1)),
+        Value::Function(_) => todo!(),
+        Value::TypeAlias(_) => todo!(),
+        Value::TypeIdentity(_) => todo!(),
+        Value::Discard => todo!(),
+        Value::Integer(_) => todo!(),
+        Value::IdentifierChain(_) => todo!(),
+        Value::String(_) => todo!(),
     }
 }
 
@@ -122,7 +132,7 @@ fn assert_of(name: &str, node: &Node, in_type: Vec<Type>, out_type: Vec<Type>) {
 
 #[cfg(test)]
 mod tests {
-    use super::type_it;
+    use super::{walk_first_pass, walk_second_pass};
     use crate::{
         lexer::TokenContext,
         parser::{parse_module, Node, Type, Value},
@@ -142,15 +152,13 @@ mod tests {
                 discard: _"#,
             ))),
         };
-        type_it(&mut node);
-
-        println!("typed: {:#?}", node);
+        walk_first_pass(&mut node);
 
         if let Value::Module { usings: _, map } = *node.value.clone() {
             // function
             let function = map.get("function").expect("function was not in the map");
             assert_eq!(function.in_type, Type::None);
-            assert_eq!(function.out_type, Type::None);
+            assert_eq!(function.out_type, Type::Function(Box::new(Type::None)));
             assert_eq!(*function.value, Value::Function(vec![]));
 
             // array
@@ -194,19 +202,43 @@ mod tests {
             out_type: Type::None,
             value: Box::new(parse_module(&mut TokenContext::new(r#"atomized: (100)"#))),
         };
-        type_it(&mut node);
+        walk_first_pass(&mut node);
 
         if let Value::Module { usings: _, map } = *node.value.clone() {
             let atomized = map.get("atomized").unwrap();
             assert_eq!(atomized.in_type, Type::None);
-            assert_eq!(atomized.out_type, Type::Atom);
+            assert_eq!(atomized.out_type, Type::Function(Box::new(Type::Atom)));
         } else {
             panic!("node was not module");
         }
     }
 
     #[test]
-    pub fn types_function_with_reference() {}
+    pub fn types_function_with_reference() {
+        let mut node = Node {
+            in_type: Type::None,
+            out_type: Type::None,
+            value: Box::new(parse_module(&mut TokenContext::new(
+                r#"
+                    reference: "i'm a string"
+                    referenced: (reference)
+                "#,
+            ))),
+        };
+        walk_first_pass(&mut node);
+        walk_second_pass(&mut node);
+
+        if let Value::Module { usings: _, map } = *node.value.clone() {
+            let atomized = map.get("referenced").unwrap();
+            assert_eq!(atomized.in_type, Type::None);
+            assert_eq!(
+                atomized.out_type,
+                Type::Function(Box::new(Type::Array(Box::new(Type::Atom))))
+            );
+        } else {
+            panic!("node was not module");
+        }
+    }
 
     #[test]
     pub fn types_parameter() {}

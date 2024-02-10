@@ -11,7 +11,8 @@ pub enum Type {
 
     Context,
     Array(Box<Type>),
-
+    Function(Box<Type>),
+    
     Atom,
     Reference,
     None,

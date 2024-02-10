@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::{modulizer::to_module_tree, typer::type_it};
+use crate::{modulizer::to_module_tree, typer::walk_first_pass};
 
 mod flattener;
 mod lexer;
@@ -13,7 +13,7 @@ fn main() -> io::Result<()> {
     io::stdin().read_line(&mut buffer)?;
 
     let mut tree = to_module_tree(&buffer);
-    type_it(&mut tree);
+    walk_first_pass(&mut tree);
 
     println!("{:#?}", tree);
 
