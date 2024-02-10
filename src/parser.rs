@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::HashMap;
 
 use crate::lexer::{Token, TokenContext};
@@ -9,14 +10,14 @@ pub enum Type {
     Identity(Box<Type>),
     Alias(Box<Type>),
 
-    Context,
+    Context(Vec<(String, Box<Type>)>),
     Array(Box<Type>),
     Function(Box<Type>),
+
+    Reference(IdentifierChain),
     
     Atom,
-    Reference,
     None,
-    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,7 +39,7 @@ pub enum Value {
     TypeIdentity(Node),
     Discard,
 
-    Integer(u32),
+    Atom(u32),
     IdentifierChain(IdentifierChain),
     String(String),
 }
@@ -51,7 +52,7 @@ pub fn parse_module(context: &mut TokenContext) -> Value {
     while context.current == Some(Token::UseKeyword) {
         context.get_next();
 
-        let chain = parse_value(context).expect(&format!("Missing identifier after 'use' keyword"));
+        let chain = parse_value(context).unwrap_or_else(|| panic!("Missing identifier after 'use' keyword"));
 
         match *chain.value {
             Value::IdentifierChain(c) => usings.push(c),
@@ -72,7 +73,7 @@ pub fn parse_module(context: &mut TokenContext) -> Value {
             // Really we need to rework the entire get_next
             // philosophy, so instead of root-causing, I'm opting
             // to just put this condition and move on.
-            if context.get_next() == None {
+            if context.get_next().is_none() {
                 break;
             }
 
@@ -84,7 +85,7 @@ pub fn parse_module(context: &mut TokenContext) -> Value {
 
         map.insert(
             key.clone(),
-            value.expect(&format!("Missing value after declaration of {}", key)),
+            value.unwrap_or_else(|| panic!("Missing value after declaration of {}", key)),
         );
     }
 
@@ -113,7 +114,9 @@ fn parse_value(context: &mut TokenContext) -> Option<Node> {
         Some(Token::IdentifierSeparator) => todo!(),
         Some(Token::Define) => todo!(),
 
-        Some(Token::MacroSymbol) => todo!(),
+        Some(Token::MacroSymbol) => todo!("Macros are not implemented yet"),
+
+        Some(Token::Identifier(_)) => Some(parse_identifier_chain(context)),
 
         Some(Token::DiscardSymbol) => {
             context.get_next();
@@ -123,13 +126,12 @@ fn parse_value(context: &mut TokenContext) -> Option<Node> {
                 value: Box::new(Value::Discard),
             })
         }
-        Some(Token::Identifier(_)) => Some(parse_identifier_chain(context)),
         Some(Token::Integer(value)) => {
             context.get_next();
             Some(Node {
                 in_type: Type::None,
                 out_type: Type::Atom,
-                value: Box::new(Value::Integer(value.to_owned())),
+                value: Box::new(Value::Atom(value.to_owned())),
             })
         }
         Some(Token::String(ref value)) => {
@@ -138,11 +140,11 @@ fn parse_value(context: &mut TokenContext) -> Option<Node> {
             context.get_next();
 
             Some(Node {
-            in_type: Type::None,
-            out_type: Type::Array(Box::new(Type::Atom)),
-            value: Box::new(Value::String(string)),
-        }) 
-    },
+                in_type: Type::None,
+                out_type: Type::Array(Box::new(Type::Atom)),
+                value: Box::new(Value::String(string)),
+            }) 
+        },
         Some(Token::UseKeyword) => todo!("Found use keyword not at the top of the file. If you're trying to name a variable 'use', please choose something else so we can distinguish between using statements and variables."),
         Some(Token::Unknown(ref c)) => todo!("We never have found the end of the universe {}", &c),
         None => todo!("No one knows where none will goes"),
@@ -159,6 +161,7 @@ fn parse_list(context: &mut TokenContext) -> Node {
     let mut list: Vec<Node> = vec![];
 
     let mut last_was_separator = true;
+    let mut array_type: Option<Type> = None;
     loop {
         match context.current {    
             Some(Token::ListEnd) => {
@@ -180,15 +183,32 @@ fn parse_list(context: &mut TokenContext) -> Node {
                     panic!("Unknown token supplied to list");
                 }
 
-                list.push(next_value.unwrap());
+                let value = next_value.unwrap();
+
+                if array_type.is_none() {
+                    array_type = Some(value.clone().out_type);
+                } else if value.out_type != array_type.clone().unwrap() {
+                    let mut is_reference = false;
+                    if let Type::Reference(_) = value.out_type {
+                        is_reference = true;
+                    } 
+                    if let Type::Reference(_) = array_type.clone().unwrap() {
+                        is_reference = true;
+                    } 
+                    if !is_reference {
+                        todo!("Found missmatched type for array: found {:#?}, expected: {:#?}", value.out_type, array_type);
+                    }
+                }
+
+                list.push(value);
             }
             None => break,
         }
     }
 
     return Node {
-        in_type: Type::Unknown,
-        out_type: Type::Array(Box::new(Type::Unknown)),
+        in_type: infer_complex_type(list.iter().map(|i| &i.in_type).collect()),
+        out_type: Type::Array(Box::new(array_type.unwrap_or(Type::None))),
         value: Box::new(Value::Array(list)),
     };
 }
@@ -231,8 +251,8 @@ fn parse_map(context: &mut TokenContext<'_>) -> Node {
     }
 
     Node {
-        in_type: Type::Unknown,
-        out_type: Type::Context,
+        in_type: infer_complex_type(map.clone().values().map(|e| &e.in_type).collect()),
+        out_type: Type::Context(map.clone().into_iter().map(|e| (e.0, Box::new(e.1.out_type))).collect()),
         value: Box::new(Value::Map(map)),
     }
 }
@@ -269,9 +289,14 @@ fn parse_function(context: &mut TokenContext<'_>) -> Node {
 
     steps.append(&mut chain);
 
+    let temp_steps = steps.clone();
+    let in_type = temp_steps.first().unwrap_or(&Node { in_type: Type::None, out_type: Type::None, value: Box::new(Value::Discard) }).in_type.clone();
+    let out_steps = steps.clone();
+    let out_type = out_steps.last().unwrap_or(&Node { in_type: Type::None, out_type: Type::None, value: Box::new(Value::Discard) }).out_type.clone();
+
     Node {
-        in_type: Type::Unknown,
-        out_type: Type::Unknown,
+        in_type,
+        out_type: Type::Function(Box::new(out_type)),
         value: Box::new(Value::Function(steps)),
     }
 }
@@ -360,7 +385,7 @@ fn parse_type_identity(context: &mut TokenContext<'_>) -> Node {
             out_type: Type::Identity(Box::new(i.clone().out_type)),
             value: Box::new(Value::TypeIdentity(i)),
         },
-        None => todo!("No value parsed after alias"),
+        None => todo!("No value parsed after identity"),
     }
 }
 
@@ -394,10 +419,83 @@ fn parse_identifier_chain(context: &mut TokenContext<'_>) -> Node {
     }
 
     Node {
-        in_type: Type::Unknown,
-        out_type: Type::Reference,
-        value: Box::new(Value::IdentifierChain(chain)),
+        in_type: Type::Reference(chain.clone()),
+        out_type: Type::Reference(chain.clone()),
+        value: Box::new(Value::IdentifierChain(chain.clone())),
     }
+}
+
+fn infer_complex_type(types: Vec<&Type>) -> Type {
+    if types.is_empty() {
+        return Type::None;
+    }
+    
+    let temp_types = types.clone();
+    let result = *temp_types.first().unwrap();
+    // TODO: Optimize where we don't grab the first element?
+    for next in types {
+        match (result, next) {
+            (Type::Identity(i), Type::Identity(r)) => {
+                    if i != r {
+                        todo!("Identities were not the same");
+                    }
+            },
+            (Type::Identity(_), _) => todo!("Result was an identity, but the next value was not"),
+            (Type::Alias(alias), next) => {
+                panic!("here's where I let off");
+            }
+            (Type::Context(_), Type::Identity(_)) => todo!(),
+            (Type::Context(_), Type::Alias(_)) => todo!(),
+            (Type::Context(_), Type::Context(_)) => todo!(),
+            (Type::Context(_), Type::Array(_)) => todo!(),
+            (Type::Context(_), Type::Function(_)) => todo!(),
+            (Type::Context(_), Type::Reference(_)) => todo!(),
+            (Type::Context(_), Type::Atom) => todo!(),
+            (Type::Context(_), Type::None) => todo!(),
+            (Type::Array(_), Type::Identity(_)) => todo!(),
+            (Type::Array(_), Type::Alias(_)) => todo!(),
+            (Type::Array(_), Type::Context(_)) => todo!(),
+            (Type::Array(_), Type::Array(_)) => todo!(),
+            (Type::Array(_), Type::Function(_)) => todo!(),
+            (Type::Array(_), Type::Reference(_)) => todo!(),
+            (Type::Array(_), Type::Atom) => todo!(),
+            (Type::Array(_), Type::None) => todo!(),
+            (Type::Function(_), Type::Identity(_)) => todo!(),
+            (Type::Function(_), Type::Alias(_)) => todo!(),
+            (Type::Function(_), Type::Context(_)) => todo!(),
+            (Type::Function(_), Type::Array(_)) => todo!(),
+            (Type::Function(_), Type::Function(_)) => todo!(),
+            (Type::Function(_), Type::Reference(_)) => todo!(),
+            (Type::Function(_), Type::Atom) => todo!(),
+            (Type::Function(_), Type::None) => todo!(),
+            (Type::Reference(_), Type::Identity(_)) => todo!(),
+            (Type::Reference(_), Type::Alias(_)) => todo!(),
+            (Type::Reference(_), Type::Context(_)) => todo!(),
+            (Type::Reference(_), Type::Array(_)) => todo!(),
+            (Type::Reference(_), Type::Function(_)) => todo!(),
+            (Type::Reference(_), Type::Reference(_)) => todo!(),
+            (Type::Reference(_), Type::Atom) => todo!(),
+            (Type::Reference(_), Type::None) => todo!(),
+            (Type::Atom, Type::Identity(_)) => todo!(),
+            (Type::Atom, Type::Alias(_)) => todo!(),
+            (Type::Atom, Type::Context(_)) => todo!(),
+            (Type::Atom, Type::Array(_)) => todo!(),
+            (Type::Atom, Type::Function(_)) => todo!(),
+            (Type::Atom, Type::Reference(_)) => todo!(),
+            (Type::Atom, Type::Atom) => todo!(),
+            (Type::Atom, Type::None) => todo!(),
+            (Type::None, Type::Identity(_)) => todo!(),
+            (Type::None, Type::Alias(_)) => todo!(),
+            (Type::None, Type::Context(_)) => todo!(),
+            (Type::None, Type::Array(_)) => todo!(),
+            (Type::None, Type::Function(_)) => todo!(),
+            (Type::None, Type::Reference(_)) => todo!(),
+            (Type::None, Type::Atom) => todo!(),
+            (Type::None, Type::None) => todo!(),
+        }
+    };
+
+    result.clone()
 }
 
 #[cfg(test)]
@@ -426,14 +524,14 @@ mod tests {
                         for ele in list {
                             match *ele.value {
                                 Value::Array(_) => {}
-                                _ => assert!(false, "List element was a different type"),
+                                _ => panic!("List element was a different type"),
                             }
                         }
                     }
-                    _ => assert!(false, "List was a different type"),
+                    _ => panic!("List was a different type"),
                 };
             }
-            None => assert!(false, "List was None"),
+            None => panic!("List was None"),
         }
     }
 
@@ -451,20 +549,17 @@ mod tests {
 
         match result {
             Value::Function(steps) => {
-                let mut current = 0;
-                for step_box in steps {
+                for (current, step_box) in steps.into_iter().enumerate() {
                     let step = *step_box.value;
                     match step {
-                        Value::Integer(value) => {
-                            assert_eq!(value, current);
+                        Value::Atom(value) => {
+                            assert_eq!(value as usize, current);
                         }
-                        _ => assert!(false, "Node was not an integer"),
+                        _ => panic!("Node was not an integer"),
                     }
-
-                    current += 1;
                 }
             }
-            _ => assert!(false, "Node was not a function"),
+            _ => panic!("Node was not a function"),
         }
     }
 
@@ -475,13 +570,13 @@ mod tests {
 
         match result {
             Value::IdentifierChain(identifiers) => {
-                assert_eq!("hello", identifiers.get(0).unwrap());
+                assert_eq!("hello", identifiers.first().unwrap());
                 assert_eq!("from", identifiers.get(1).unwrap());
                 assert_eq!("the", identifiers.get(2).unwrap());
                 assert_eq!("out", identifiers.get(3).unwrap());
                 assert_eq!("side", identifiers.get(4).unwrap());
             }
-            _ => assert!(false, "Node was not a function"),
+            _ => panic!("Node was not a function"),
         }
     }
 
@@ -491,13 +586,13 @@ mod tests {
         let result = parse_value(&mut context).unwrap();
 
         match result.in_type {
-            Type::Reference => {}
-            tp => assert!(1 == 0, "Expected in to be Reference, but was {:#?}", tp),
+            Type::Reference(_) => {}
+            tp => panic!("Expected in to be Reference, but was {:#?}", tp),
         }
 
         match result.out_type {
             Type::None => {}
-            tp => assert!(1 == 0, "Expected in to be None, but was {:#?}", tp),
+            tp => panic!("Expected in to be None, but was {:#?}", tp),
         }
     }
 
@@ -512,18 +607,17 @@ mod tests {
         "#,
         );
         if let Value::Module{usings, map} = parse_module(&mut context){
+            assert_eq!(
+                usings.first(),
+                Some(&vec!["first".to_owned(), "thing".to_owned()])
+            );
+            assert_eq!(usings.get(1), Some(&vec!["other".to_owned()]));
 
-        assert_eq!(
-            usings.get(0),
-            Some(&vec!["first".to_owned(), "thing".to_owned()])
-        );
-        assert_eq!(usings.get(1), Some(&vec!["other".to_owned()]));
-
-        assert_eq!(map.len(), 1);
-        assert!(
-            map.get("fn").is_some(),
-            "Expected function was not parsed."
-        );
-    }
+            assert_eq!(map.len(), 1);
+            assert!(
+                map.get("fn").is_some(),
+                "Expected function was not parsed."
+            );
+        }
     }
 }
