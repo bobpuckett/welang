@@ -10,7 +10,7 @@ pub enum Type {
     Identity(Box<Type>),
     Alias(Box<Type>),
 
-    Context(Vec<(String, Box<Type>)>),
+    Context(HashMap<String, Box<Type>>),
     Array(Box<Type>),
     Function(Box<Type>),
 
@@ -169,6 +169,9 @@ fn parse_list(context: &mut TokenContext) -> Node {
                 break;
             },
             Some(Token::ListSeparator) => {
+                if last_was_separator {
+                    todo!("Found a duplicate separator in a list");
+                }
                 context.get_next();
                 last_was_separator = true;
             },
@@ -430,72 +433,78 @@ fn infer_complex_type(types: Vec<&Type>) -> Type {
         return Type::None;
     }
     
-    let temp_types = types.clone();
-    let result = *temp_types.first().unwrap();
-    // TODO: Optimize where we don't grab the first element?
-    for next in types {
-        match (result, next) {
-            (Type::Identity(i), Type::Identity(r)) => {
-                    if i != r {
-                        todo!("Identities were not the same");
-                    }
-            },
-            (Type::Identity(_), _) => todo!("Result was an identity, but the next value was not"),
-            (Type::Alias(alias), next) => {
-                panic!("here's where I let off");
-            }
-            (Type::Context(_), Type::Identity(_)) => todo!(),
-            (Type::Context(_), Type::Alias(_)) => todo!(),
-            (Type::Context(_), Type::Context(_)) => todo!(),
-            (Type::Context(_), Type::Array(_)) => todo!(),
-            (Type::Context(_), Type::Function(_)) => todo!(),
-            (Type::Context(_), Type::Reference(_)) => todo!(),
-            (Type::Context(_), Type::Atom) => todo!(),
-            (Type::Context(_), Type::None) => todo!(),
-            (Type::Array(_), Type::Identity(_)) => todo!(),
-            (Type::Array(_), Type::Alias(_)) => todo!(),
-            (Type::Array(_), Type::Context(_)) => todo!(),
-            (Type::Array(_), Type::Array(_)) => todo!(),
-            (Type::Array(_), Type::Function(_)) => todo!(),
-            (Type::Array(_), Type::Reference(_)) => todo!(),
-            (Type::Array(_), Type::Atom) => todo!(),
-            (Type::Array(_), Type::None) => todo!(),
-            (Type::Function(_), Type::Identity(_)) => todo!(),
-            (Type::Function(_), Type::Alias(_)) => todo!(),
-            (Type::Function(_), Type::Context(_)) => todo!(),
-            (Type::Function(_), Type::Array(_)) => todo!(),
-            (Type::Function(_), Type::Function(_)) => todo!(),
-            (Type::Function(_), Type::Reference(_)) => todo!(),
-            (Type::Function(_), Type::Atom) => todo!(),
-            (Type::Function(_), Type::None) => todo!(),
-            (Type::Reference(_), Type::Identity(_)) => todo!(),
-            (Type::Reference(_), Type::Alias(_)) => todo!(),
-            (Type::Reference(_), Type::Context(_)) => todo!(),
-            (Type::Reference(_), Type::Array(_)) => todo!(),
-            (Type::Reference(_), Type::Function(_)) => todo!(),
-            (Type::Reference(_), Type::Reference(_)) => todo!(),
-            (Type::Reference(_), Type::Atom) => todo!(),
-            (Type::Reference(_), Type::None) => todo!(),
-            (Type::Atom, Type::Identity(_)) => todo!(),
-            (Type::Atom, Type::Alias(_)) => todo!(),
-            (Type::Atom, Type::Context(_)) => todo!(),
-            (Type::Atom, Type::Array(_)) => todo!(),
-            (Type::Atom, Type::Function(_)) => todo!(),
-            (Type::Atom, Type::Reference(_)) => todo!(),
-            (Type::Atom, Type::Atom) => todo!(),
-            (Type::Atom, Type::None) => todo!(),
-            (Type::None, Type::Identity(_)) => todo!(),
-            (Type::None, Type::Alias(_)) => todo!(),
-            (Type::None, Type::Context(_)) => todo!(),
-            (Type::None, Type::Array(_)) => todo!(),
-            (Type::None, Type::Function(_)) => todo!(),
-            (Type::None, Type::Reference(_)) => todo!(),
-            (Type::None, Type::Atom) => todo!(),
-            (Type::None, Type::None) => todo!(),
-        }
-    };
+    types.into_iter().fold(Type::None, accumulate_type)
+}
 
-    result.clone()
+fn accumulate_type(acc: Type, next: &Type) -> Type {
+    match (acc.clone(), next) {
+        (Type::Alias(a), Type::Alias(n)) => accumulate_type(*a, n),
+        (Type::Alias(a), n) => accumulate_type(*a, n),
+        (a, Type::Alias(n)) => accumulate_type(a, n), 
+
+        (Type::Identity(a), Type::Identity(n)) => {
+            if &a != n {
+                todo!("Identities were not the same");
+            }
+            acc
+        },
+        (Type::Context(a), Type::Context(n)) => {
+            let mut map = a.clone();
+
+            n.iter().for_each(|kvp| {
+                if map.contains_key(kvp.0) {
+                    let current = map.get(kvp.0);
+                    let suggested = kvp.1;
+
+                    if current != Some(suggested) {
+                        panic!("Tried to use {} as both {:#?} and {:#?}", kvp.0, current, suggested)
+                    }
+                } else {
+                    map.insert(kvp.0.clone(), kvp.1.clone());
+                }
+            });
+
+            Type::Context(map)
+        },
+        (Type::Context(_), Type::Array(_)) => todo!("Tried to use a context and an array in the same input"),
+        (Type::Context(_), Type::Function(_)) => todo!(),
+        (Type::Context(_), Type::Reference(_)) => todo!(),
+        (Type::Context(_), Type::Atom) => todo!(),
+        (Type::Context(_), Type::None) => acc,
+        (Type::Array(_), Type::Context(_)) => todo!(),
+        (Type::Array(_), Type::Array(_)) => todo!(),
+        (Type::Array(_), Type::Function(_)) => todo!(),
+        (Type::Array(_), Type::Reference(_)) => todo!(),
+        (Type::Array(_), Type::Atom) => todo!(),
+        (Type::Array(_), Type::None) => todo!(),
+        (Type::Function(_), Type::Context(_)) => todo!(),
+        (Type::Function(_), Type::Array(_)) => todo!(),
+        (Type::Function(_), Type::Function(_)) => todo!(),
+        (Type::Function(_), Type::Reference(_)) => todo!(),
+        (Type::Function(_), Type::Atom) => todo!(),
+        (Type::Function(_), Type::None) => todo!(),
+        (Type::Reference(_), Type::Context(_)) => todo!(),
+        (Type::Reference(_), Type::Array(_)) => todo!(),
+        (Type::Reference(_), Type::Function(_)) => todo!(),
+        (Type::Reference(_), Type::Reference(_)) => todo!(),
+        (Type::Reference(_), Type::Atom) => todo!(),
+        (Type::Reference(_), Type::None) => todo!(),
+        (Type::Atom, Type::Context(_)) => todo!(),
+        (Type::Atom, Type::Array(_)) => todo!(),
+        (Type::Atom, Type::Function(_)) => todo!(),
+        (Type::Atom, Type::Reference(_)) => todo!(),
+        (Type::Atom, Type::Atom) => todo!(),
+        (Type::Atom, Type::None) => todo!(),
+        (Type::None, Type::Context(_)) => todo!(),
+        (Type::None, Type::Array(_)) => todo!(),
+        (Type::None, Type::Function(_)) => todo!(),
+        (Type::None, Type::Reference(_)) => todo!(),
+        (Type::None, Type::Atom) => todo!(),
+        (Type::None, Type::None) => Type::None,
+
+        (Type::Identity(_), _) => todo!("Result was an identity, but the next value was not"),
+        (_, Type::Identity(_)) => todo!("Next value was an identity, but the result was not"),
+    }
 }
 
 #[cfg(test)]

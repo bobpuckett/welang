@@ -1,0 +1,63 @@
+token: *
+	listStart |
+	listEnd |
+	mapStart | 
+	mapEnd |
+	termStart |
+	termEnd |
+	typeParameterStart |
+	typeParameterEnd |
+	typeAliasSymbol |
+	typeIdentitySymbol |
+	pipeSymbol |
+	separatorSymbol |
+	accessorSymbol |
+	asSymbol |
+	useKeyword |
+	inKeyword |
+	unsignedLiteral |
+	string |
+	identifier |
+	unknown
+
+
+listStart: '"["
+listEnd: '"]"
+mapStart : '"{"
+mapEnd: '"}"
+termStart: '"("
+termEnd: '")"
+typeParameterStart: '"<"
+typeParameterEnd: '">"
+typeAliasSymbol: '"'"
+typeIdentitySymbol: '"*"
+pipeSymbol: '"|"
+separatorSymbol: '","
+accessorSymbol: '"."
+asSymbol: '":"
+useKeyword: '"use"
+inKeyword: '"in"
+unsignedLiteral: 'atom(in)
+string: 'string
+identifier: 'string
+unknown: 'string
+
+scanner: *{
+	position: u32,
+	source: string,
+	current: optional token
+}
+
+newScanner: <string, scanner>(
+	scanner {position: 0, source: in, current: none}
+	| nextToken
+)
+
+nextToken: <scanner, scanner>(
+	if [
+		greater [in.position, lengthOf in.source],
+		
+	]
+)
+
+
