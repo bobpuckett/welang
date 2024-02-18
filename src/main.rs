@@ -6,6 +6,7 @@ mod flattener;
 mod lexer;
 mod modulizer;
 mod parser;
+mod typer;
 
 fn main() -> io::Result<()> {
     let mut buffer = String::new();

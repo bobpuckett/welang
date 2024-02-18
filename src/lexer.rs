@@ -4,8 +4,8 @@ pub enum Token {
     ListEnd,
     MapStart,
     MapEnd,
-    FunctionStart,
-    FunctionEnd,
+    WordStart,
+    WordEnd,
     TypeParameterStart,
     TypeParameterEnd,
     TypeAlias,
@@ -87,8 +87,8 @@ impl TokenContext<'_> {
             Some(']') => Token::ListEnd,
             Some('{') => Token::MapStart,
             Some('}') => Token::MapEnd,
-            Some('(') => Token::FunctionStart,
-            Some(')') => Token::FunctionEnd,
+            Some('(') => Token::WordStart,
+            Some(')') => Token::WordEnd,
             Some('<') => Token::TypeParameterStart,
             Some('>') => Token::TypeParameterEnd,
             Some('\'') => Token::TypeAlias,
@@ -194,7 +194,7 @@ mod tests {
             Token::Identifier("hi".to_string())
         );
         assert_eq!(context.get_next().unwrap(), Token::Define);
-        assert_eq!(context.get_next().unwrap(), Token::FunctionStart);
+        assert_eq!(context.get_next().unwrap(), Token::WordStart);
         assert_eq!(
             context.get_next().unwrap(),
             Token::Identifier("bob".to_string())
@@ -209,7 +209,7 @@ mod tests {
             context.get_next().unwrap(),
             Token::Identifier("palindrome".to_string())
         );
-        assert_eq!(context.get_next().unwrap(), Token::FunctionEnd);
+        assert_eq!(context.get_next().unwrap(), Token::WordEnd);
         assert_eq!(context.get_next().unwrap(), Token::Integer(123));
         assert_eq!(context.get_next().unwrap(), Token::ListSeparator);
     }

@@ -6,37 +6,16 @@ use crate::lexer::{Token, TokenContext};
 pub type IdentifierChain = Vec<String>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Type {
-    Identity(Box<Type>),
-    Alias(Box<Type>),
-
-    Context(HashMap<String, Box<Type>>),
-    Array(Box<Type>),
-    Function(Box<Type>),
-
-    Reference(IdentifierChain),
-    
-    Atom,
-    None,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Node {
-    pub in_type: Type,
-    pub out_type: Type,
-    pub value: Box<Value>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    Module{usings: Vec<IdentifierChain>, map:   HashMap<String, Node>},
+    Module{usings: Vec<IdentifierChain>, map: HashMap<String, Value>},
     
-    Array(Vec<Node>),
-    Map(HashMap<String, Node>),
-    Function(Vec<Node>),
+    Array(Vec<Value>),
+    Map(HashMap<String, Value>),
+    Word(Vec<Value>),
 
-    TypeAlias(Node),
-    TypeIdentity(Node),
+    TypeAlias(Box<Value>),
+    TypeIdentity(Box<Value>),
+    Parameterized{in_type: Box<Value>, out_type: Box<Value>, value: Box<Value>},
     Discard,
 
     Atom(u32),
@@ -46,7 +25,7 @@ pub enum Value {
 
 pub fn parse_module(context: &mut TokenContext) -> Value {
     let mut usings: Vec<IdentifierChain> = vec![];
-    let mut map: HashMap<String, Node> = HashMap::new();
+    let mut map: HashMap<String, Value> = HashMap::new();
 
     // Set usings
     while context.current == Some(Token::UseKeyword) {
@@ -54,7 +33,7 @@ pub fn parse_module(context: &mut TokenContext) -> Value {
 
         let chain = parse_value(context).unwrap_or_else(|| panic!("Missing identifier after 'use' keyword"));
 
-        match *chain.value {
+        match chain {
             Value::IdentifierChain(c) => usings.push(c),
             other => todo!(
                 "Expected an identifier chain after using, but found: {:#?}",
@@ -92,7 +71,7 @@ pub fn parse_module(context: &mut TokenContext) -> Value {
     Value::Module { usings, map }
 }
 
-fn parse_value(context: &mut TokenContext) -> Option<Node> {
+pub fn parse_value(context: &mut TokenContext) -> Option<Value> {
     match context.current {
         Some(Token::ListStart) => Some(parse_list(context)),
         Some(Token::ListEnd) => todo!("Found mismatched list end"),
@@ -100,8 +79,8 @@ fn parse_value(context: &mut TokenContext) -> Option<Node> {
         Some(Token::MapStart) => Some(parse_map(context)),
         Some(Token::MapEnd) => todo!("Found mismatched map end"),
 
-        Some(Token::FunctionStart) => Some(parse_function(context)),
-        Some(Token::FunctionEnd) => todo!("Found mismatched function end"),
+        Some(Token::WordStart) => Some(parse_word(context)),
+        Some(Token::WordEnd) => todo!("Found mismatched word end"),
 
         Some(Token::TypeParameterStart) => Some(parse_type_parameter(context)),
         Some(Token::TypeParameterEnd) => todo!("Found mismatched type parameter end"),
@@ -120,30 +99,18 @@ fn parse_value(context: &mut TokenContext) -> Option<Node> {
 
         Some(Token::DiscardSymbol) => {
             context.get_next();
-            Some(Node {
-                in_type: Type::None,
-                out_type: Type::None,
-                value: Box::new(Value::Discard),
-            })
+            Some(Value::Discard)
         }
         Some(Token::Integer(value)) => {
             context.get_next();
-            Some(Node {
-                in_type: Type::None,
-                out_type: Type::Atom,
-                value: Box::new(Value::Atom(value.to_owned())),
-            })
+            Some(Value::Atom(value.to_owned()))
         }
         Some(Token::String(ref value)) => {
             let string = value.clone();
 
             context.get_next();
 
-            Some(Node {
-                in_type: Type::None,
-                out_type: Type::Array(Box::new(Type::Atom)),
-                value: Box::new(Value::String(string)),
-            }) 
+            Some(Value::String(string)) 
         },
         Some(Token::UseKeyword) => todo!("Found use keyword not at the top of the file. If you're trying to name a variable 'use', please choose something else so we can distinguish between using statements and variables."),
         Some(Token::Unknown(ref c)) => todo!("We never have found the end of the universe {}", &c),
@@ -151,17 +118,16 @@ fn parse_value(context: &mut TokenContext) -> Option<Node> {
     }
 }
 
-fn parse_list(context: &mut TokenContext) -> Node {
+fn parse_list(context: &mut TokenContext) -> Value {
     match context.current {
         Some(Token::ListStart) => {}
         _ => panic!("Tried to parse a non-list as a list"),
     }
     context.get_next();
 
-    let mut list: Vec<Node> = vec![];
+    let mut list: Vec<Value> = vec![];
 
     let mut last_was_separator = true;
-    let mut array_type: Option<Type> = None;
     loop {
         match context.current {    
             Some(Token::ListEnd) => {
@@ -186,43 +152,22 @@ fn parse_list(context: &mut TokenContext) -> Node {
                     panic!("Unknown token supplied to list");
                 }
 
-                let value = next_value.unwrap();
-
-                if array_type.is_none() {
-                    array_type = Some(value.clone().out_type);
-                } else if value.out_type != array_type.clone().unwrap() {
-                    let mut is_reference = false;
-                    if let Type::Reference(_) = value.out_type {
-                        is_reference = true;
-                    } 
-                    if let Type::Reference(_) = array_type.clone().unwrap() {
-                        is_reference = true;
-                    } 
-                    if !is_reference {
-                        todo!("Found missmatched type for array: found {:#?}, expected: {:#?}", value.out_type, array_type);
-                    }
-                }
-
-                list.push(value);
+                list.push(next_value.unwrap());
             }
             None => break,
         }
     }
 
-    return Node {
-        in_type: infer_complex_type(list.iter().map(|i| &i.in_type).collect()),
-        out_type: Type::Array(Box::new(array_type.unwrap_or(Type::None))),
-        value: Box::new(Value::Array(list)),
-    };
+    Value::Array(list)
 }
 
-fn parse_map(context: &mut TokenContext<'_>) -> Node {
+fn parse_map(context: &mut TokenContext<'_>) -> Value {
     match context.current {
         Some(Token::MapStart) => {}
         _ => panic!("Tried to parse a non-map as a map"),
     }
 
-    let mut map: HashMap<String, Node> = HashMap::new();
+    let mut map: HashMap<String, Value> = HashMap::new();
 
     loop {
         let next = context.get_next();
@@ -253,25 +198,21 @@ fn parse_map(context: &mut TokenContext<'_>) -> Node {
         };
     }
 
-    Node {
-        in_type: infer_complex_type(map.clone().values().map(|e| &e.in_type).collect()),
-        out_type: Type::Context(map.clone().into_iter().map(|e| (e.0, Box::new(e.1.out_type))).collect()),
-        value: Box::new(Value::Map(map)),
-    }
+    Value::Map(map)
 }
 
-fn parse_function(context: &mut TokenContext<'_>) -> Node {
+fn parse_word(context: &mut TokenContext<'_>) -> Value {
     match context.current {
-        Some(Token::FunctionStart) => {}
-        _ => panic!("Tried to parse a non-function as a function"),
+        Some(Token::WordStart) => {}
+        _ => panic!("Tried to parse a non-word as a word"),
     };
     context.get_next();
 
-    let mut steps: Vec<Node> = vec![];
-    let mut chain: Vec<Node> = vec![];
+    let mut steps: Vec<Value> = vec![];
+    let mut chain: Vec<Value> = vec![];
     loop {
         match context.current {
-            Some(Token::FunctionEnd) => {
+            Some(Token::WordEnd) => {
                 context.get_next();
                 break;
             }
@@ -283,28 +224,21 @@ fn parse_function(context: &mut TokenContext<'_>) -> Node {
             Some(_) => {
                 match parse_value(context) {
                     Some(value) => chain.insert(0, value),
-                    None => todo!("Couldn't pase value in function"),
+                    None => todo!("Couldn't pase value in word"),
                 };
             }
-            None => todo!("Function not closed"),
+            None => todo!("Word not closed"),
         };
     }
-
     steps.append(&mut chain);
 
-    let temp_steps = steps.clone();
-    let in_type = temp_steps.first().unwrap_or(&Node { in_type: Type::None, out_type: Type::None, value: Box::new(Value::Discard) }).in_type.clone();
-    let out_steps = steps.clone();
-    let out_type = out_steps.last().unwrap_or(&Node { in_type: Type::None, out_type: Type::None, value: Box::new(Value::Discard) }).out_type.clone();
+    // Put the last step at the front to make the flattener's job easy
+    steps.reverse();
 
-    Node {
-        in_type,
-        out_type: Type::Function(Box::new(out_type)),
-        value: Box::new(Value::Function(steps)),
-    }
+    Value::Word(steps)
 }
 
-fn parse_type_parameter(context: &mut TokenContext<'_>) -> Node {
+fn parse_type_parameter(context: &mut TokenContext<'_>) -> Value {
     // Start
     match context.current {
         Some(Token::TypeParameterStart) => {}
@@ -313,9 +247,7 @@ fn parse_type_parameter(context: &mut TokenContext<'_>) -> Node {
     context.get_next();
 
     // In
-    let in_type = parse_value(context)
-        .expect("Could not find in type while parsing type parameter")
-        .out_type;
+    let in_type = parse_value(context).expect("Could not find in type while parsing type parameter");
 
     // Separator
     match &context.current {
@@ -325,9 +257,7 @@ fn parse_type_parameter(context: &mut TokenContext<'_>) -> Node {
     context.get_next();
 
     // Out
-    let out_type = parse_value(context)
-        .expect("Could not find out type while parsing type parameter")
-        .out_type;
+    let out_type = parse_value(context).expect("Could not find out type while parsing type parameter");
 
     // End
     match &context.current {
@@ -341,18 +271,12 @@ fn parse_type_parameter(context: &mut TokenContext<'_>) -> Node {
 
     // Value
     let value = parse_value(context)
-        .expect("Could not find a subsequent value after the type parameter")
-        .value;
+        .expect("Could not find a subsequent value after the type parameter");
 
-    // TODO: replace in a smart manner. Don't clobber existing info or trust human hands.
-    Node {
-        in_type,
-        out_type,
-        value,
-    }
+    Value::Parameterized { in_type: Box::new(in_type), out_type: Box::new(out_type), value: Box::new(value) }
 }
 
-fn parse_type_alias(context: &mut TokenContext<'_>) -> Node {
+fn parse_type_alias(context: &mut TokenContext<'_>) -> Value {
     // Start
     match context.current {
         Some(Token::TypeAlias) => {}
@@ -363,16 +287,12 @@ fn parse_type_alias(context: &mut TokenContext<'_>) -> Node {
     let alias = parse_value(context);
 
     match alias {
-        Some(a) => Node {
-            in_type: a.clone().in_type,
-            out_type: Type::Alias(Box::new(a.clone().out_type.clone())),
-            value: Box::new(Value::TypeAlias(a)),
-        },
+        Some(a) => Value::TypeAlias(Box::new(a)),
         None => todo!("No value parsed after alias"),
     }
 }
 
-fn parse_type_identity(context: &mut TokenContext<'_>) -> Node {
+fn parse_type_identity(context: &mut TokenContext<'_>) -> Value {
     // Start
     match context.current {
         Some(Token::TypeIdentity) => {}
@@ -383,16 +303,12 @@ fn parse_type_identity(context: &mut TokenContext<'_>) -> Node {
     let id = parse_value(context);
 
     match id {
-        Some(i) => Node {
-            in_type: i.clone().in_type,
-            out_type: Type::Identity(Box::new(i.clone().out_type)),
-            value: Box::new(Value::TypeIdentity(i)),
-        },
+        Some(i) => Value::TypeIdentity(Box::new(i)),
         None => todo!("No value parsed after identity"),
     }
 }
 
-fn parse_identifier_chain(context: &mut TokenContext<'_>) -> Node {
+fn parse_identifier_chain(context: &mut TokenContext<'_>) -> Value {
     match context.current {
         Some(Token::Identifier(_)) => {}
         _ => todo!("Tried to parse a non-identifier as an identifier chain"),
@@ -421,90 +337,7 @@ fn parse_identifier_chain(context: &mut TokenContext<'_>) -> Node {
         };
     }
 
-    Node {
-        in_type: Type::Reference(chain.clone()),
-        out_type: Type::Reference(chain.clone()),
-        value: Box::new(Value::IdentifierChain(chain.clone())),
-    }
-}
-
-fn infer_complex_type(types: Vec<&Type>) -> Type {
-    if types.is_empty() {
-        return Type::None;
-    }
-    
-    types.into_iter().fold(Type::None, accumulate_type)
-}
-
-fn accumulate_type(acc: Type, next: &Type) -> Type {
-    match (acc.clone(), next) {
-        (Type::Alias(a), Type::Alias(n)) => accumulate_type(*a, n),
-        (Type::Alias(a), n) => accumulate_type(*a, n),
-        (a, Type::Alias(n)) => accumulate_type(a, n), 
-
-        (Type::Identity(a), Type::Identity(n)) => {
-            if &a != n {
-                todo!("Identities were not the same");
-            }
-            acc
-        },
-        (Type::Context(a), Type::Context(n)) => {
-            let mut map = a.clone();
-
-            n.iter().for_each(|kvp| {
-                if map.contains_key(kvp.0) {
-                    let current = map.get(kvp.0);
-                    let suggested = kvp.1;
-
-                    if current != Some(suggested) {
-                        panic!("Tried to use {} as both {:#?} and {:#?}", kvp.0, current, suggested)
-                    }
-                } else {
-                    map.insert(kvp.0.clone(), kvp.1.clone());
-                }
-            });
-
-            Type::Context(map)
-        },
-        (Type::Context(_), Type::Array(_)) => todo!("Tried to use a context and an array in the same input"),
-        (Type::Context(_), Type::Function(_)) => todo!(),
-        (Type::Context(_), Type::Reference(_)) => todo!(),
-        (Type::Context(_), Type::Atom) => todo!(),
-        (Type::Context(_), Type::None) => acc,
-        (Type::Array(_), Type::Context(_)) => todo!(),
-        (Type::Array(_), Type::Array(_)) => todo!(),
-        (Type::Array(_), Type::Function(_)) => todo!(),
-        (Type::Array(_), Type::Reference(_)) => todo!(),
-        (Type::Array(_), Type::Atom) => todo!(),
-        (Type::Array(_), Type::None) => todo!(),
-        (Type::Function(_), Type::Context(_)) => todo!(),
-        (Type::Function(_), Type::Array(_)) => todo!(),
-        (Type::Function(_), Type::Function(_)) => todo!(),
-        (Type::Function(_), Type::Reference(_)) => todo!(),
-        (Type::Function(_), Type::Atom) => todo!(),
-        (Type::Function(_), Type::None) => todo!(),
-        (Type::Reference(_), Type::Context(_)) => todo!(),
-        (Type::Reference(_), Type::Array(_)) => todo!(),
-        (Type::Reference(_), Type::Function(_)) => todo!(),
-        (Type::Reference(_), Type::Reference(_)) => todo!(),
-        (Type::Reference(_), Type::Atom) => todo!(),
-        (Type::Reference(_), Type::None) => todo!(),
-        (Type::Atom, Type::Context(_)) => todo!(),
-        (Type::Atom, Type::Array(_)) => todo!(),
-        (Type::Atom, Type::Function(_)) => todo!(),
-        (Type::Atom, Type::Reference(_)) => todo!(),
-        (Type::Atom, Type::Atom) => todo!(),
-        (Type::Atom, Type::None) => todo!(),
-        (Type::None, Type::Context(_)) => todo!(),
-        (Type::None, Type::Array(_)) => todo!(),
-        (Type::None, Type::Function(_)) => todo!(),
-        (Type::None, Type::Reference(_)) => todo!(),
-        (Type::None, Type::Atom) => todo!(),
-        (Type::None, Type::None) => Type::None,
-
-        (Type::Identity(_), _) => todo!("Result was an identity, but the next value was not"),
-        (_, Type::Identity(_)) => todo!("Next value was an identity, but the result was not"),
-    }
+    Value::IdentifierChain(chain.clone())
 }
 
 #[cfg(test)]
@@ -513,7 +346,7 @@ mod tests {
 
     use crate::{
         lexer::TokenContext,
-        parser::{parse_value, Type, Value},
+        parser::{parse_value, Value},
     };
 
     use super::parse_module;
@@ -525,13 +358,12 @@ mod tests {
 
         assert!(result.is_some(), "List was none");
         match result {
-            Some(node) => {
-                let value = *node.value;
+            Some(value) => {
                 match value {
                     Value::Array(list) => {
                         assert_eq!(list.len(), 3);
                         for ele in list {
-                            match *ele.value {
+                            match ele {
                                 Value::Array(_) => {}
                                 _ => panic!("List element was a different type"),
                             }
@@ -552,14 +384,14 @@ mod tests {
     }
 
     #[test]
-    fn parses_function_steps_in_order() {
-        let mut context = TokenContext::new("(2 1 0 ; 3 ; 4 ; 8 7 6 5)");
-        let result = *parse_value(&mut context).unwrap().value;
+    fn parses_word_steps_in_order() {
+        let mut context = TokenContext::new("(6 7 8 ; 5 ; 4 ; 0 1 2 3)");
+        let result = parse_value(&mut context).unwrap();
 
         match result {
-            Value::Function(steps) => {
+            Value::Word(steps) => {
                 for (current, step_box) in steps.into_iter().enumerate() {
-                    let step = *step_box.value;
+                    let step = step_box;
                     match step {
                         Value::Atom(value) => {
                             assert_eq!(value as usize, current);
@@ -568,14 +400,14 @@ mod tests {
                     }
                 }
             }
-            _ => panic!("Node was not a function"),
+            _ => panic!("Node was not a word"),
         }
     }
 
     #[test]
     fn parses_identifier_chain() {
         let mut context = TokenContext::new("hello.from.the.out.side");
-        let result = *parse_value(&mut context).unwrap().value;
+        let result = parse_value(&mut context).unwrap();
 
         match result {
             Value::IdentifierChain(identifiers) => {
@@ -585,7 +417,7 @@ mod tests {
                 assert_eq!("out", identifiers.get(3).unwrap());
                 assert_eq!("side", identifiers.get(4).unwrap());
             }
-            _ => panic!("Node was not a function"),
+            _ => panic!("Node was not a word"),
         }
     }
 
@@ -594,14 +426,16 @@ mod tests {
         let mut context = TokenContext::new("<first.second, _>(log)");
         let result = parse_value(&mut context).unwrap();
 
-        match result.in_type {
-            Type::Reference(_) => {}
-            tp => panic!("Expected in to be Reference, but was {:#?}", tp),
-        }
+        if let Value::Parameterized { in_type, out_type, value: _ } = result {
+            match *in_type {
+                Value::IdentifierChain(_) => {}
+                tp => panic!("Expected in to be Reference, but was {:#?}", tp),
+            }
 
-        match result.out_type {
-            Type::None => {}
-            tp => panic!("Expected in to be None, but was {:#?}", tp),
+            match *out_type {
+                Value::Discard => {},
+                tp => panic!("Expected in to be None, but was {:#?}", tp),
+            }           
         }
     }
 
@@ -625,7 +459,7 @@ mod tests {
             assert_eq!(map.len(), 1);
             assert!(
                 map.get("fn").is_some(),
-                "Expected function was not parsed."
+                "Expected word was not parsed."
             );
         }
     }

@@ -5,42 +5,34 @@ use std::{
 
 use crate::{
     lexer::TokenContext,
-    parser::{parse_module, Node, Type, Value},
+    parser::{parse_module, Value},
 };
 
-pub fn to_module_tree(path: &str) -> Node {
-    let md = metadata(&path);
+pub fn to_module_tree(path: &str) -> Value {
+    let md = metadata(path);
     match md {
         Ok(val) if val.is_file() => {
-            let content = fs::read_to_string(&path);
+            let content = fs::read_to_string(path);
 
             match content {
-                Ok(source) => Node {
-                    in_type: Type::None,
-                    out_type: Type::None, // TODO: Is None really the right type here?
-                    value: Box::new(parse_module(&mut TokenContext::new(&source))),
-                },
+                Ok(source) => parse_module(&mut TokenContext::new(&source)),
                 Err(_) => todo!("Could not read {}", &path),
             }
         }
         Ok(val) if val.is_dir() => {
             let map = read_dir(path)
-                .expect(&format!("Could not read dir: {}", &path))
+                .unwrap_or_else(|_| panic!("Could not read dir: {}", &path))
                 .map(|p| {
                     let file_name = p.unwrap().file_name();
                     let next_path = file_name.to_str().unwrap();
-                    let module_name = get_mod_name(&next_path);
+                    let module_name = get_mod_name(next_path);
                     let submodule = to_module_tree(next_path);
 
                     (module_name, submodule)
                 })
                 .collect::<HashMap<_, _>>();
 
-            Node {
-                in_type: Type::None,
-                out_type: Type::None,
-                value: Box::new(Value::Map(map)),
-            }
+            Value::Map(map)
         }
         Ok(_) => todo!(), // could be a symlink
 
