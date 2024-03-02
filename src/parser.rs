@@ -1,7 +1,7 @@
 use core::panic;
 use std::collections::HashMap;
 
-use crate::lexer::{Token, TokenContext};
+use crate::lexer::{Token, Scanner};
 
 pub type IdentifierChain = Vec<String>;
 
@@ -23,7 +23,7 @@ pub enum Value {
     String(String),
 }
 
-pub fn parse_module(context: &mut TokenContext) -> Value {
+pub fn parse_module(context: &mut Scanner) -> Value {
     let mut usings: Vec<IdentifierChain> = vec![];
     let mut map: HashMap<String, Value> = HashMap::new();
 
@@ -71,7 +71,7 @@ pub fn parse_module(context: &mut TokenContext) -> Value {
     Value::Module { usings, map }
 }
 
-pub fn parse_value(context: &mut TokenContext) -> Option<Value> {
+pub fn parse_value(context: &mut Scanner) -> Option<Value> {
     match context.current {
         Some(Token::ListStart) => Some(parse_list(context)),
         Some(Token::ListEnd) => todo!("Found mismatched list end"),
@@ -118,7 +118,7 @@ pub fn parse_value(context: &mut TokenContext) -> Option<Value> {
     }
 }
 
-fn parse_list(context: &mut TokenContext) -> Value {
+fn parse_list(context: &mut Scanner) -> Value {
     match context.current {
         Some(Token::ListStart) => {}
         _ => panic!("Tried to parse a non-list as a list"),
@@ -161,7 +161,7 @@ fn parse_list(context: &mut TokenContext) -> Value {
     Value::Array(list)
 }
 
-fn parse_map(context: &mut TokenContext<'_>) -> Value {
+fn parse_map(context: &mut Scanner<'_>) -> Value {
     match context.current {
         Some(Token::MapStart) => {}
         _ => panic!("Tried to parse a non-map as a map"),
@@ -201,7 +201,7 @@ fn parse_map(context: &mut TokenContext<'_>) -> Value {
     Value::Map(map)
 }
 
-fn parse_word(context: &mut TokenContext<'_>) -> Value {
+fn parse_word(context: &mut Scanner<'_>) -> Value {
     match context.current {
         Some(Token::WordStart) => {}
         _ => panic!("Tried to parse a non-word as a word"),
@@ -238,7 +238,7 @@ fn parse_word(context: &mut TokenContext<'_>) -> Value {
     Value::Word(steps)
 }
 
-fn parse_type_parameter(context: &mut TokenContext<'_>) -> Value {
+fn parse_type_parameter(context: &mut Scanner<'_>) -> Value {
     // Start
     match context.current {
         Some(Token::TypeParameterStart) => {}
@@ -276,7 +276,7 @@ fn parse_type_parameter(context: &mut TokenContext<'_>) -> Value {
     Value::Parameterized { in_type: Box::new(in_type), out_type: Box::new(out_type), value: Box::new(value) }
 }
 
-fn parse_type_alias(context: &mut TokenContext<'_>) -> Value {
+fn parse_type_alias(context: &mut Scanner<'_>) -> Value {
     // Start
     match context.current {
         Some(Token::TypeAlias) => {}
@@ -292,7 +292,7 @@ fn parse_type_alias(context: &mut TokenContext<'_>) -> Value {
     }
 }
 
-fn parse_type_identity(context: &mut TokenContext<'_>) -> Value {
+fn parse_type_identity(context: &mut Scanner<'_>) -> Value {
     // Start
     match context.current {
         Some(Token::TypeIdentity) => {}
@@ -308,7 +308,7 @@ fn parse_type_identity(context: &mut TokenContext<'_>) -> Value {
     }
 }
 
-fn parse_identifier_chain(context: &mut TokenContext<'_>) -> Value {
+fn parse_identifier_chain(context: &mut Scanner<'_>) -> Value {
     match context.current {
         Some(Token::Identifier(_)) => {}
         _ => todo!("Tried to parse a non-identifier as an identifier chain"),
@@ -345,7 +345,7 @@ mod tests {
     use std::vec;
 
     use crate::{
-        lexer::TokenContext,
+        lexer::Scanner,
         parser::{parse_value, Value},
     };
 
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn parses_list_correctly() {
-        let mut context = TokenContext::new("[[], [], []]");
+        let mut context = Scanner::new("[[], [], []]");
         let result = parse_value(&mut context);
 
         assert!(result.is_some(), "List was none");
@@ -378,14 +378,14 @@ mod tests {
 
     #[test]
     fn finds_separator() {
-        let mut context = TokenContext::new("[local, in]");
+        let mut context = Scanner::new("[local, in]");
         // This has produced a missing separator error in the past
         parse_value(&mut context);
     }
 
     #[test]
     fn parses_word_steps_in_order() {
-        let mut context = TokenContext::new("(6 7 8 ; 5 ; 4 ; 0 1 2 3)");
+        let mut context = Scanner::new("(6 7 8 ; 5 ; 4 ; 0 1 2 3)");
         let result = parse_value(&mut context).unwrap();
 
         match result {
@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn parses_identifier_chain() {
-        let mut context = TokenContext::new("hello.from.the.out.side");
+        let mut context = Scanner::new("hello.from.the.out.side");
         let result = parse_value(&mut context).unwrap();
 
         match result {
@@ -423,7 +423,7 @@ mod tests {
 
     #[test]
     fn parses_type_parameter() {
-        let mut context = TokenContext::new("<first.second, _>(log)");
+        let mut context = Scanner::new("<first.second, _>(log)");
         let result = parse_value(&mut context).unwrap();
 
         if let Value::Parameterized { in_type, out_type, value: _ } = result {
@@ -441,7 +441,7 @@ mod tests {
 
     #[test]
     fn parses_module() {
-        let mut context = TokenContext::new(
+        let mut context = Scanner::new(
             r#"
         use first.thing
         use other

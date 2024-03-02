@@ -28,7 +28,7 @@ pub enum Token {
     Unknown(String),
 }
 
-pub struct TokenContext<'a> {
+pub struct Scanner<'a> {
     position: usize,
     source: &'a str,
     pub current: Option<Token>,
@@ -36,9 +36,9 @@ pub struct TokenContext<'a> {
     row: i32,
 }
 
-impl TokenContext<'_> {
-    pub fn new(source: &str) -> TokenContext {
-        let mut context = TokenContext {
+impl Scanner<'_> {
+    pub fn new(source: &str) -> Scanner {
+        let mut context = Scanner {
             position: 0,
             source,
             current: None,
@@ -183,11 +183,11 @@ impl TokenContext<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::lexer::{Token, TokenContext};
+    use crate::lexer::{Scanner, Token};
 
     #[test]
     fn handles_whitespace() {
-        let mut context: TokenContext = TokenContext::new(" hi : ( bob.the.palindrome ) 123, ");
+        let mut context: Scanner = Scanner::new(" hi : ( bob.the.palindrome ) 123, ");
 
         assert_eq!(
             context.current.clone().unwrap(),
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn can_end_with_identifier_chain() {
-        let mut context: TokenContext = TokenContext::new("hello.from.the.out.side");
+        let mut context: Scanner = Scanner::new("hello.from.the.out.side");
 
         assert_eq!(
             context.current.clone().unwrap(),
@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     pub fn can_lex_string() {
-        let mut context: TokenContext = TokenContext::new(
+        let mut context: Scanner = Scanner::new(
             "anyString: \"anyString\"
         anyInt: 100
         ",

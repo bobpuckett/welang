@@ -2,6 +2,7 @@ use std::io;
 
 use crate::modulizer::to_module_tree;
 
+mod construct;
 mod flattener;
 mod lexer;
 mod modulizer;

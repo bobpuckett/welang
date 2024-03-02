@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    lexer::TokenContext,
+    lexer::Scanner,
     parser::{parse_module, Value},
 };
 
@@ -15,7 +15,7 @@ pub fn to_module_tree(path: &str) -> Value {
             let content = fs::read_to_string(path);
 
             match content {
-                Ok(source) => parse_module(&mut TokenContext::new(&source)),
+                Ok(source) => parse_module(&mut Scanner::new(&source)),
                 Err(_) => todo!("Could not read {}", &path),
             }
         }

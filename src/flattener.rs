@@ -60,7 +60,9 @@ pub enum Type {
 //     }
 // }
 
-pub struct Step {}
+pub trait Step {
+    fn to_string();
+}
 
 pub fn flatten_main_path(root: Value) -> Vec<Step> {
     // TODO: Too many scopes
@@ -228,7 +230,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::{
-        lexer::TokenContext,
+        lexer::Scanner,
         parser::{parse_module, Value},
     };
 
@@ -253,7 +255,7 @@ mod tests {
     // This imitates getting files and making a map without actually having
     // to create the file structure.
     fn make_root(string: &str) -> Value {
-        let mut context = TokenContext::new(string);
+        let mut context = Scanner::new(string);
         let root_module = parse_module(&mut context);
         let mut root_map: HashMap<String, Value> = HashMap::new();
         root_map.insert("main".to_owned(), root_module);
