@@ -1,0 +1,65 @@
+- [ ] lambda calculus
+    - [ ] functions
+    - [ ] higher order functions
+    - [ ] labels
+    - [ ] define statements
+    - [ ] post and prefix notation
+    - [ ] input variables
+- [ ] simply typed lambda calculous
+    - [ ] implicit typing
+    - [ ] explicit typing
+    - [ ] sum typing
+- [ ] numbers
+    - [ ] unsigned integer literals
+    - [ ] signed integer literals
+    - [ ] hex literals
+    - [ ] binary literals
+    - [ ] float literals
+    - [ ] decimal literals
+    - [ ] u type
+    - [ ] i type
+    - [ ] number type
+    - [ ] range type
+- [ ] binary operations 
+    - [ ] and
+    - [ ] or
+    - [ ] not
+    - [ ] xor
+- [ ] number operations
+    - [ ] add
+    - [ ] subtract
+    - [ ] multiply
+    - [ ] divide
+    - [ ] modulo
+    - [ ] power
+    - [ ] logarithm
+- [ ] contexts
+    - [ ] key value pairs
+    - [ ] input label accessor
+    - [ ] context types
+    - [ ] type constraints
+- [ ] tuples
+    - [ ] tuple literals
+    - [ ] tuple types
+    - [ ] input index accessor
+    - [ ] type constraints
+- [ ] arrays
+    - [ ] literals
+    - [ ] types
+    - [ ] type constraints
+- [ ] array operations
+    - [ ] map
+    - [ ] filter
+    - [ ] flatten
+    - [ ] shift
+    - [ ] unshift
+    - [ ] concatenate
+    - [ ] pop
+    - [ ] push
+    - [ ] removeat
+    - [ ] accumulate
+    - [ ] sort (provide the sort function to the method)
+- [ ] strings
+    - [ ] literals
+    - [ ] types
+    - [ ] type constraints    - [ ] interpolation
